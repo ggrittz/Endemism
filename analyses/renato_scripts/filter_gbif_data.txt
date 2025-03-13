@@ -1,0 +1,35 @@
+## Codes provided by Lucie Zinger (10 Sep 2018) - cite her in the acknowledgments!
+
+# Download of GBIF data (all Tracheophyta, Preserved Specimens, Neotropical countries)
+wget https://api.gbif.org/v1/occurrence/download/request/0203029-210914110416597.zip
+
+# Unzipping
+#unzip 0203029-210914110416597.zip
+#unzip -p 0203029-210914110416597.zip path/to/zipped/occurrence.txt > occurrence.txt
+
+# Importing the list of species names to perform the filtering (or copy/paste directly in the server)
+#scp amazon_spp_unix.txt ubuntu@dna-mark:/home/ubuntu/Renato
+
+# Formattage de la liste dans un ficher temporaire (virer les “, la premiere ligne, puis les tabulations de fin de tableau, sinon ca marche pas), et stock le résultat dans un fichier temporaire ($$)
+# Only necessary if there are headers, quotes and two columns
+# Files need to be saved as Unix (LF) and UTF-8 
+#sed -e 's/"//g' amazon_spp_unix.txt | awk 'NR !=1 {print $0}' | awk 'BEGIN {FS="\t"} {OFS=" "} {print $2}'  > $$
+
+# Renomme le fichier temporaire
+#mv $$ amazon_spp_edited.txt 
+
+# Recherche exacte des espèces
+#LC_ALL=C fgrep -f amazon_spp_edited.txt 0203029-210914110416597.csv > titi
+
+# Recherche exacte des espèces direct du zip (faut pas unzipper et occuper la memoire du cluster)
+#unzip -c -j 0203029-210914110416597.zip 'occurrence.txt' | LC_ALL=C fgrep -f amazon_spp_edited.txt > titi
+unzip -c -j 0203029-210914110416597.zip 'occurrence.txt' | LC_ALL=C fgrep -f amazon_spp_unix.txt > titi
+
+# Getting the headers of the dwca file (line number 3)
+unzip -c -j 0203029-210914110416597.zip 'occurrence.txt' | awk 'NR==3 {print $0}' > toto
+
+# Combine this with the former file
+cat toto titi > gbif_amazon_spp.csv
+
+# Finally, zip it
+zip gbif_amazon_plant_spp.zip gbif_amazon_spp.csv

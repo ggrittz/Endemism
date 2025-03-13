@@ -1,0 +1,19 @@
+## provided by Lucie Zinger (10 Sep 2018)
+# Download of GBIF data (all Tracheophyta)
+wget http://api.gbif.org/v1/occurrence/download/request/0009189-180824113759888.zip
+
+# Unzipping
+unzip 0009189-180824113759888.zip
+
+# Importing the list of species names to perform the preliminary filtering (no longer necessary: copying and pasting directly in the server)
+#scp treesSA.txt ubuntu@dna-mark:/home/ubuntu/Renato
+
+# Formattage de la liste dans un ficher temporaire (virer les “, la premiere ligne, puis les tabulations de fin de tableau, sinon ca marche pas), et stock le résultat dans un fichier temporaire ($$)
+sed -e 's/"//g' treesSA.txt | awk 'NR !=1 {print $0}' | awk 'BEGIN {FS="\t"} {print $2}'  > $$ # the file need to be created using: sep="\t"
+sed -e 's/"//g' treesSA.txt | awk 'NR !=1 {print $0}' | awk 'BEGIN {FS="\t"} {OFS=" "} {print $2}'  > $$
+
+# Renomme le fichier temporaire
+mv $$ treesSA_edited.txt 
+
+# Recherche exacte des espèces
+LC_ALL=C fgrep -f treesSA.txt 0009189-180824113759888.csv > gbif_treeSA.csv
