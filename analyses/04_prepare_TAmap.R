@@ -1,5 +1,4 @@
 
-
 # Preparing tropical American map -----------------------------------------
 
 # Downloading ecorregions Dinerstein et al. (2017)
@@ -30,32 +29,56 @@ unzip(zipfile = file.path(file_path, file_name),
 er <- terra::vect(here::here("data", "raw-data", "maps", "Ecoregions2017.shp"))
 # Morrone 2022
 nt <- terra::vect(here::here("data", "raw-data", "maps", "morrone2022.shp"))
+# Remove what is not considered Neotropic in Morrone 2022
+nt <- nt[!nt$Region %in% "N/A", ]
 
-# Crop the ecoregions into the Neotropical realm extent
-nt_ext <- terra::ext(nt)
-er_cropped <- terra::crop(er, nt_ext)
-terra::plot(er_cropped)
+# Subset and rename only relevant columns from each SpatVector
+keep <- c("ECO_NAME", "BIOME_NAME", "REALM", "COLOR", "COLOR_BIO")
+er <- er[, keep]
 
-morrone_df <- terra::as.data.frame(morrone)
+keep <- c("Provincias", "Region", "Subregion", "Dominio")
+nt <- nt[, keep]
+names(nt)[which(names(nt) == "Provincias")] <- "Morrone_provinces"
+names(nt)[which(names(nt) == "Region")] <- "Morrone_region"
+names(nt)[which(names(nt) == "Subregion")] <- "Morrone_subregion"
+names(nt)[which(names(nt) == "Dominio")] <- "Morrone_domain"
 
-morrone_ext <- terra::ext(morrone)
-terra::plot(morrone_ext, 'red')
+# Now, remove what is not considered Neotropic realm by masking the ecoregions
+# into this final dissolved map
+nt_dis <- terra::fillHoles(terra::aggregate(nt, dissolve = TRUE))
 
-er <- here::here("data", "raw-data", "maps", "Ecoregions2017.shp")
-er <- terra::vect(er)
-er_neotrop <- terra::crop(er, morrone_ext)
-er_neotrop_df <- terra::as.data.frame(er_neotrop)
+# Crop the global Ecoregions into the Neotropics
+er_final <- terra::crop(er, terra::ext(nt_dis))
+# Mask the ecoregions into the Neotropics
+er_final <- terra::intersect(er_final, nt_dis)
+# Id, tag, and save
+er_final$ID <- 1:dim(er_final)[1]
+er_final$Morrone_def <- "Neotropics"
 
-# Géraldine
-gera <- here::here("data", "raw-data", "maps", "Biom_agg_forested.shp")
-gera <- terra::vect(gera)
-gera <- terra::as.data.frame(gera)
+# Load SynTreeSys map to check which ecoregions are missing and we need to
+# manually classify
 
-#
-
-
-
-
+##### I am hoping Géraldine has this information here #####
 
 
+# Save everything
+file_path <- here::here("data", "derived-data", "maps")
+
+if(!dir.exists(file_path))
+  dir.create(file_path)
+
+# Morrone 2022 Neotropical map, complete (without N/A)
+file_name1 <- "Neotropic_complete.shp"
+terra::writeVector(nt, file.path(file_path, file_name1), overwrite = TRUE)
+
+# Morrone 2022 Neotropical map, dissolved (without N/A)
+file_name2 <- "Neotropic_dissolved.shp"
+terra::writeVector(nt_dis, file.path(file_path, file_name2), overwrite = TRUE)
+
+# Ecoregions 2017 masked into the Neotropical map
+file_name3 <- "Neotropical_ecoregions.shp"
+terra::writeVector(er_final, file.path(file_path, file_name3), overwrite = TRUE)
+
+# And the data.frame to edit
+writexl::write_xlsx(terra::as.data.frame(er_final), file.path(file_path, "Neotropical_ecoregions.xlsx"))
 
