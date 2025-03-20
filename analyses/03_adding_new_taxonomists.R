@@ -1,5 +1,7 @@
-# Preparing new plantR gazzetter localities and taxonomists
+
+# Adding more taxonomists to plantR data ----------------------------------
 devtools::load_all()
+
 # Read all
 file_path <- here::here("data", "derived-data", "Cleaned_occs")
 folders <- list.files(file_path, full.names = TRUE)
@@ -9,9 +11,6 @@ family_names <- readRDS(here::here("data", "derived-data", "family_names.rds"))
 path_plantR <- file.path("D:", "plantR", "data-raw", "raw_dictionaries", "taxonomists.csv")
 tax_plantR <- read.csv(path_plantR)
 fam_plantR <- plantR:::familiesSynonyms
-gaz_plantR <- file.path("D:", "plantR", "data-raw", "raw_dictionaries", "gazetteer.csv")
-gaz_plantR <- read.csv(gaz_plantR)
-# gaz_plantR1 <- plantR:::gazetteer
 
 
 # GBIF specialists by number of registers identified ----------------------
@@ -391,64 +390,5 @@ tax_plantR_new$family[get_these] <- paste0(tax_plantR_new$family[get_these], "?"
 # Save
 path_save <- here::here("data", "derived-data", "raw_dic_taxonomists.rds")
 saveRDS(tax_plantR_new, path_save)
-
-
-
-# The the top 10000 localities found in GBIF ------------------------------
-
-# Needed columns: status, source, order, loc, loc.correct (?), lat, lon, res.gaz
-# NAME_01 = country; NAME_02 = state; NAME_03 = municipality; NAME_04 = locality
-
-loc_list <- list()
-
-for (i in family_names) {
-  rds_file <- file.path(file_path, i, paste0(i, ".rds"))
-  
-  if (file.exists(rds_file)) {
-
-    df <- readRDS(rds_file)
-
-    df <- df[df$loc.check1 %in% c("check_local.2country", "check_local.2state") | 
-               df$geo.check1 %in% "check_gazetteer", ]
-    
-    # Select only the specified columns
-    df <- df[, c("country.new", "stateProvince.new", "loc",
-                 "locality", "locality.new", "loc.correct1",
-                 "loc.check1", "geo.check1",
-                 "decimalLatitude.new1", "decimalLongitude.new1",
-                 "resolution.gazetteer1")]
-    
-    # Add the filtered and selected dataframe to the list
-    loc_list[[i]] <- df
-  } else {
-    cat("File not found:", i, "\n")
-  }
-}
-
-gc()
-
-loc_list <- do.call(rbind, loc_list)
-loc_list$family <- rownames(loc_list)
-rownames(loc_list) <- NULL
-loc_list$family <- gsub("\\..*", "", loc_list$family)
-
-# file_path2 <- here::here("data", "derived-data")
-# file_name2 <- "localities_new.parquet"
-# arrow::write_parquet(loc_list, sink = file.path(file_path2, file_name2))
-# arrow::read_parquet(...)
-
-# Count localities
-loc_list_new$count <- 1
-loc_list_new1 <- aggregate(count ~ loc.correct1 + loc.check1 + locality.new, 
-                           data = loc_list_new, FUN = sum)
-
-# Count localities
-loc_list_new <- data.frame(table(loc_list$loc.correct1))
-loc_list_new1 <- loc_list_new[order(loc_list_new$Freq, decreasing = TRUE), ]
-loc_list_new1 <- loc_list_new1[1:10000, ]
-
-
-
-
 
 
