@@ -33,8 +33,8 @@
 #' *Recording Units* (Level 4) levels. Due to taxonomic differences between backbones,
 #' we first recommend to prepare the names (ideally using the __plantR__ function
 #' `prepSpecies()`) accordingly to the source of distribution information
-#' to be used, that is, using BFO backbone and `source` = "bfo" or WCVP bacbkbone and `source` = "wcvp".
-#' As an example, in BFO backbone, Araucaria angustifolia (Bertol.) Kuntze is
+#' to be used, that is, using BFO and `source` = "bfo" or WCVP and `source` = "wcvp".
+#' As an example, in BFO, Araucaria angustifolia (Bertol.) Kuntze is
 #' the accepted name, while in WCVP the accepted name is
 #' Araucaria angustifolia (Bertol.) Steud. If we were to use the first name to check
 #' botanical countries ("wcvp") we would incur in a warning in the output column
@@ -68,8 +68,8 @@
 #' "brazil_santa catarina_blumenau",
 #' "chile_santiago", "brazil_parana_curitiba")
 #' 
-#' df <- data.frame(suggestedName = spp_names,
-#'                  suggestedAuthorship = spp_authors,
+#' df <- data.frame(scientificName.new = spp_names,
+#'                  scientificNameAuthorship.new = spp_authors,
 #'                  loc.correct = loc) 
 #' checkDist(df)
 #' checkDist(df, source = "wcvp")
@@ -83,7 +83,8 @@
 #' @export checkDist
 #'
 checkDist <- function(x,
-                      tax.names = c("suggestedName", "suggestedAuthorship"),
+                      tax.name = "scientificName.new",
+                      tax.author = "scientificNameAuthorship.new",
                       loc = "loc.correct",
                       sep = "_",
                       source = "bfo") {
@@ -97,22 +98,20 @@ checkDist <- function(x,
   if(!loc %in% names(x))
     stop("Input data frame must have a column with localities!", call. = FALSE)
   
-  if(!tax.names[1] %in% names(x))
+  if(!tax.name %in% names(x))
     stop("Input data frame must have a column with species names!", call. = FALSE)
   
-  if(is.na(tax.names[2])) {
-    warning("Column name with species authorities not provided; setting to 'suggestedAuthorship'")
-    tax.names[2] <- "suggestedAuthorship"
+  if(is.na(tax.author)) {
+    warning("Column name with species authorities not provided; setting to 'scientificNameAuthorship.new'")
+    tax.author <- "scientificNameAuthorship.new"
   }
   
   x1 <- x
   tempID <- "tempID"
   x1$tempID <- 1:nrow(x1)
   x$tempID <- 1:nrow(x)
-  
   sep <- gsub("(\\|)", "\\\\\\1", sep, perl = TRUE)
   sep <- gsub("(\\/)", "\\\\\\1", sep, perl = TRUE)
-  
   x1[[loc]] <- plantR::prepLoc(x1[[loc]])
   x1$loc.abbrev <- gsub(paste0("^([^", sep, 
                                "]*", sep, 
@@ -124,47 +123,36 @@ checkDist <- function(x,
                         perl = TRUE)
   
   if(source == 'bfo') {
-    
     bfoNames <- plantR::bfoNames
-
     check_these <- is.na(bfoNames$taxon.distribution)
     if(any(check_these))
       bfoNames$taxon.distribution[check_these] <- "check.name.status"
-    
-
     x1 <- dplyr::left_join(x1, bfoNames[, c("name", "authorship", 
                                             "taxon.distribution")],
-                           by = setNames(c("name", "authorship"), tax.names))
+                           by = setNames("name", tax.name),
+                           keep = TRUE)
     
-    get_these <- which(!is.na(x1$taxon.distribution) &
-                         !is.na(x1[tax.names[2]]) &
-                         x1$taxon.distribution != "check.name.status")
-
+    
     x1$obs <- NA
-    x1$obs[get_these] <- "full.name.match"
-    
+    x1$obs <- ifelse(
+      !is.na(x1[[tax.name]]) & (x1[[tax.name]] == x1$name),
+      ifelse(
+        !is.na(x1[[tax.author]]) & (x1[[tax.author]] == x1$authorship),
+        "full.name.match",
+        "canonical.name.match"  # Applies if tax.author is NA or != authorship
+      ),
+      x1$obs  # Keep original value if first condition fails
+    )
     get_these <- which(x1$taxon.distribution %in% "check.name.status")
     x1$obs[get_these] <- "check.name.status"
     
-
-    get_these <- which(is.na(x1$taxon.distribution))
-    x1.1 <- dplyr::left_join(x1[get_these, ], 
-                             bfoNames[, c("name", "taxon.distribution")],
-                             by = setNames("name", tax.names[1]))
-    
-    x1$taxon.distribution[get_these] <- x1.1$taxon.distribution.y
-    
-    x1$obs[get_these] <- ifelse(x1$taxon.distribution[get_these] %in%
-                                  "check.name.status", "check.name.status",
-                                "canonical.name.match")
-
     states <- c("acre", "alagoas", "amapa", "amazonas", "bahia", "ceara", 
     "distrito federal", "espirito santo", "goias", "maranhao", 
     "mato grosso", "mato grosso sul", "minas gerais", "para", 
     "paraiba", "parana", "pernambuco", "piaui", "rio janeiro", 
     "rio grande norte", "rio grande sul", "rondonia", "roraima", 
     "santa catarina", "sao paulo", "sergipe", "tocantins")
-
+    
     pattern <- paste0("^","brazil", sep, states, "$")
     
     replacement <- c(
@@ -184,17 +172,13 @@ checkDist <- function(x,
                                           strsplit(x1$taxon.distribution, 
                                                    split = "|", 
                                                    fixed = TRUE))))
-    
     x1$dist.check[is.na(x1$loc.abbrev)] <- NA
     x1$dist.check[x1$dist.check == TRUE] <- 'ok.dist'
-    x1$dist.check[x1$dist.check == FALSE &
-                    x1$taxon.distribution == "check.name.status"] <- "check.name"
     x1$dist.check[x1$dist.check == FALSE] <- 'invalid.dist'
-    
     x$dist.check[x$tempID %in% x1$tempID] <- x1$dist.check
     x$dist.check.obs[x$tempID %in% x1$tempID] <- x1$obs
-    
     x <- x[, !(names(x) %in% "tempID")]
+    
     return(x)
     
     }
@@ -204,7 +188,6 @@ checkDist <- function(x,
     wcvp_lookup <- plantR:::botanicalCountries
     wcvpNames <- plantRdata::wcvpNames[, c("name", "authorship", "taxon.distribution")]
     wcvpNames <- wcvpNames[!duplicated(paste(wcvpNames$name, wcvpNames$authorship)), ]
-    
     x1$level3 <- plantR::prepLoc(gsub(paste0(sep, ".*"), "", x1[[loc]]))
     x1$level4 <- plantR::prepLoc(gsub(paste0("^[^", sep, 
                                              "]*", sep, 
@@ -217,36 +200,23 @@ checkDist <- function(x,
     check_these <- is.na(wcvpNames$taxon.distribution)
     if(any(check_these))
       wcvpNames$taxon.distribution[check_these] <- "check.name.status"
-    
     x1 <- dplyr::left_join(x1, 
                            wcvpNames,
-                           by = setNames(c("name", "authorship"), tax.names))
-    
-    get_these <- which(!is.na(x1$taxon.distribution) &
-                         !is.na(x1[tax.names[2]]) &
-                         x1$taxon.distribution != "check.name.status")
-    
+                           by = setNames("name", tax.name),
+                           keep = TRUE)
     x1$obs <- NA
-    x1$obs[get_these] <- "full.name.match"
-    
+    x1$obs <- ifelse(
+      !is.na(x1[[tax.name]]) & (x1[[tax.name]] == x1$name),
+      ifelse(
+        !is.na(x1[[tax.author]]) & (x1[[tax.author]] == x1$authorship),
+        "full.name.match",
+        "canonical.name.match"  # Applies if tax.author is NA or != authorship
+      ),
+      x1$obs  # Keep original value if first condition fails
+    )
     get_these <- which(x1$taxon.distribution %in% "check.name.status")
     x1$obs[get_these] <- "check.name.status"
     
-    get_these <- which(is.na(x1$taxon.distribution))
-    
-    x1.1 <- dplyr::left_join(x1[get_these, ], 
-                             wcvpNames[wcvpNames$taxon.status %in% 
-                                         "accepted", 
-                                       c("name",
-                                         "taxon.distribution")],
-                             by = setNames("name", tax.names[1]))
-    
-    x1$taxon.distribution[get_these] <- x1.1$taxon.distribution.y
-    
-    x1$obs[get_these] <- ifelse(is.na(x1$taxon.distribution[get_these]), 
-                                "check.name.status",
-                                "canonical.name.match")
-      
     dist.wcvp <- strsplit(x1$taxon.distribution, 
                           split = "|", 
                           fixed = TRUE)
@@ -261,37 +231,28 @@ checkDist <- function(x,
          wcvp_lookup$taxon.distribution.bru))
     
     dist.wcvp.name <- sapply(dist.wcvp.name, function(x) paste(x, collapse = "|"))
-    
     x1$level4.name <- dist.wcvp.name
-    
     case1 <- mapply(`%in%`, 
                     x1$level3, 
                     strsplit(x1$level4.name, 
                              split = "|", 
                              fixed = TRUE))
-    
     case2 <- mapply(`%in%`, 
                     x1$level4, 
                     strsplit(x1$level4.name, 
                              split = "|", 
                              fixed = TRUE))
-    
     x1$dist.check <- case1 | case2
     
     x1$dist.check[is.na(x1$loc.abbrev)] <- NA
     x1$dist.check[x1$dist.check %in% TRUE] <- 'ok.dist'
-    x1$dist.check[x1$dist.check %in% FALSE &
-                    x1$taxon.distribution %in% 
-                    "check.name.status"] <- "check.name.status"
-    x1$dist.check[x1$dist.check %in% FALSE & 
-                    is.na(x1$taxon.distribution)] <- "check.name.status"
     x1$dist.check[x1$dist.check %in% FALSE] <- 'invalid.dist'
     x$dist.check[x$tempID %in% x1$tempID] <- x1$dist.check
     x$dist.check.obs[x$tempID %in% x1$tempID] <- x1$obs
-  
     x <- x[, !(names(x) %in% "tempID")]
+    
     return(x)
-
+    
   }
   
   
@@ -303,7 +264,7 @@ checkDist <- function(x,
       stop("The reference 'source' data frame cannot be empty!",
            call. = FALSE)
     
-    key.cols <- c(tax.names, loc)
+    key.cols <- c(tax.name, tax.author, loc)
     if(any(!key.cols %in% colnames(userdef)))
       stop("The reference 'source' data frame must contain the columns: ",
            paste(key.cols, collapse = ", "), call. = FALSE)
@@ -316,7 +277,6 @@ checkDist <- function(x,
       stop("The known locality distribution must be separated by a pipe '|'",
            call. = FALSE)
     
-
     x1$hierarchy.high <- plantR::prepLoc(gsub(paste0(sep, ".*"), 
                                               "", 
                                               x1[[loc]]))
@@ -324,43 +284,33 @@ checkDist <- function(x,
                                                     sep, "]*", 
                                                     sep, "([^", 
                                                     sep, "]+).*"),
-                                      "\\1", 
-                                      x1[[loc]]))
-    
+                                             "\\1",
+                                             x1[[loc]]))
     x1$hierarchy.low[!grepl(sep, x1[[loc]])] <- NA
     
     check_these <- is.na(userdef[[loc]])
     if(any(check_these))
       userdef[[loc]][check_these] <- "check.name.status"
     
-    
     x1 <- dplyr::left_join(x1, userdef[, key.cols],
-                           by = c(tax.names[1], tax.names[2]))
-    
+                           by = c(tax.name, tax.author))
     loc.source <- names(x1)[ncol(x1)]
-    
     get_these <- which(!is.na(x1[[loc.source]]) &
-                         !is.na(x1[tax.names[2]]) &
+                         !is.na(x1[tax.author]) &
                          x1[[loc.source]] != "check.name.status")
-    
     x1$obs <- NA
     x1$obs[get_these] <- "full.name.match"
-    
     get_these <- which(x1[[loc.source]] %in% "check.name.status")
     x1$obs[get_these] <- "check.name.status"
-    
-
     get_these <- which(is.na(x1[[loc.source]]))
-    
     x1.1 <- dplyr::left_join(x1[get_these, ], 
-                             userdef[, c(tax.names[1], loc)],
-                             by = tax.names[1])
+                             userdef[, c(tax.name, loc)],
+                             by = tax.name)
     x1[[loc.source]][get_these] <- x1.1[, ncol(x1.1)]
     
     x1$obs[get_these][x1[[loc.source]][get_these] != 
                         "check.name.status"] <- "canonical.name.match"
     x1$obs[is.na(x1$obs)] <- "check.name.status"
-  
     x1[[loc.source]] <- plantR::prepLoc(x1[[loc.source]])
     
     case.high <- mapply(grepl, 
@@ -370,7 +320,6 @@ checkDist <- function(x,
                        x1$hierarchy.low, 
                        x1[[loc.source]])
     
-    
     x1$dist.check <- NA
     x1$dist.check[case.high &
                     case.low & !is.na(case.high | case.low)] <- "ok.dist.finer"
@@ -379,15 +328,13 @@ checkDist <- function(x,
     x1$dist.check[!case.high &
                     !case.low & !is.na(case.high | case.low)] <- "invalid.dist"
     x1$dist.check[is.na(case.high|case.low)] <- NA
-    
     x$dist.check[x$tempID %in% x1$tempID] <- x1$dist.check
     x$dist.check.obs[x$tempID %in% x1$tempID] <- x1$obs
-    
     x <- x[, !(names(x) %in% "tempID")]
+    
     return(x)
     
   }
-    
 }
 
 
