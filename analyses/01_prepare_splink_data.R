@@ -12,10 +12,10 @@ family_names <- readRDS(file.path(family_names))
 our_names <- readRDS(file.path(here::here("data", "derived-data", "checklist_standardized.rds")))
 
 # Remove families already prepared, if any
-families_done <- list.dirs(here::here("data", "derived-data", "speciesLink_occ"), 
-                           full.names = FALSE)
-families_done <- families_done[!grepl("^$", families_done)]
-family_names <- setdiff(family_names, families_done)
+# families_done <- list.dirs(here::here("data", "derived-data", "speciesLink_occ"), 
+#                            full.names = FALSE)
+# families_done <- families_done[!grepl("^$", families_done)]
+# family_names <- setdiff(family_names, families_done)
 
 # Pre-loading objects that will be needed in the pipeline below
 islandsBuff <- plantR::islandsBuff
@@ -25,15 +25,8 @@ shoreLines <- plantR::shoreLines
 world <- plantR::world
 worldMap <- plantR::worldMap
 
-# Make world and worldMap have the same units, i.e., add the missing caspian sea
-setdiff(worldMap$NAME_0, world$name)
-get_these <- which(worldMap$NAME_0 %in% "caspian sea")
-caspian <- worldMap[get_these, ]
-names(caspian) <- names(world)
-world <- rbind(world, caspian)
-
 # Loading internal functions
-devtools::load_all()
+# devtools::load_all()
 
 
 # Preparing speciesLink data ----------------------------------------------
@@ -317,21 +310,21 @@ for(i in family_names){
   ##### Standardizing names of collectors and determiners #####
   
   # First collector
-  splink_data$recordedBy.new <- my_prepName(splink_data$recordedBy,
-                                          output = "first",
-                                          sep.out = "; ")
+  splink_data$recordedBy.new <- plantR::prepName(splink_data$recordedBy,
+                                                 output = "first",
+                                                 sep.out = "; ")
   # Auxilliary collectors
-  splink_data$recordedBy.aux <- my_prepName(splink_data$recordedBy,
-                                          output = "aux",
-                                          sep.out = "; ")
+  splink_data$recordedBy.aux <- plantR::prepName(splink_data$recordedBy,
+                                                 output = "aux",
+                                                 sep.out = "; ")
   # First determiner
-  splink_data$identifiedBy.new <- my_prepName(splink_data$identifiedBy,
-                                            output = "first",
-                                            sep.out = "; ")
+  splink_data$identifiedBy.new <- plantR::prepName(splink_data$identifiedBy,
+                                                   output = "first",
+                                                   sep.out = "; ")
   # Auxilliary determiners
-  splink_data$identifiedBy.aux <- my_prepName(splink_data$identifiedBy,
-                                            output = "aux",
-                                            sep.out = "; ")
+  splink_data$identifiedBy.aux <- plantR::prepName(splink_data$identifiedBy,
+                                                   output = "aux",
+                                                   sep.out = "; ")
   
   # Name notations
   splink_data$recordedBy.new <- plantR::missName(splink_data$recordedBy.new,
@@ -403,32 +396,33 @@ for(i in family_names){
   splink_data <- plantR::validateLoc(splink_data)
   
   # Validating original coordinates at country, state, and county level
-  splink_data <- my_checkCoord(splink_data,
-                               keep.cols = c("geo.check",
-                                             "NAME_0",
-                                             "country.gazet"))
+  splink_data <- plantR::checkCoord(splink_data,
+                                    keep.cols = c("geo.check",
+                                                  "NAME_0",
+                                                  "country.gazet"))
   
   # Validating coordinates due to rounding precision
-  splink_data <- my_checkBorders(splink_data, output = "same.col")
+  splink_data <- plantR::checkBorders(splink_data, output = "same.col")
   
   # Validating coordinates in the sea but close to the shore
   splink_data <- plantR::checkShore(splink_data, output = "same.col")
   
   # Validating inverted and swapped coordinates
-  splink_data <- my_checkInverted(splink_data, output = "same.col")
+  splink_data <- plantR::checkInverted(splink_data, output = "same.col")
   
   # Validating records from cultivated individuals
   splink_data <- plantR::getCult(splink_data)
   
+  ##### HERE FOR CHECKCOORD ISSUE 146 #####
   # Validating spatial outliers
   # Really specific cases where there are no valid coordinate nor
   # a country/stateProvince/locality to extract coordinates from the gazetteer
-  if (all(is.na(splink_data$decimalLongitude.new) | 
-          is.na(splink_data$decimalLatitude.new))) {
-    splink_data$out.check <- "no.coords"
-  } else {
+  # if (all(is.na(splink_data$decimalLongitude.new) | 
+  #         is.na(splink_data$decimalLatitude.new))) {
+  #   splink_data$out.check <- "no.coords"
+  # } else {
     splink_data <- plantR::checkOut(splink_data, tax.name = "scientificName")
-  }
+  #}
   
   # Validating records that are falling outside of the species' indicated botanical country
   splink_data <- checkDist(splink_data, 
