@@ -12,10 +12,10 @@ family_names <- readRDS(file.path(family_names))
 our_names <- readRDS(file.path(here::here("data", "derived-data", "checklist_standardized.rds")))
 
 # Remove families already prepared, if any
-families_done <- list.dirs(here::here("data", "derived-data", "GBIF_occ"), 
-                           full.names = FALSE)
-families_done <- families_done[!grepl("^$", families_done)]
-family_names <- setdiff(family_names, families_done)
+# families_done <- list.dirs(here::here("data", "derived-data", "GBIF_occ"), 
+#                            full.names = FALSE)
+# families_done <- families_done[!grepl("^$", families_done)]
+# family_names <- setdiff(family_names, families_done)
 
 # Pre-loading objects that will be needed in the pipeline below
 islandsBuff <- plantR::islandsBuff
@@ -25,15 +25,8 @@ shoreLines <- plantR::shoreLines
 world <- plantR::world
 worldMap <- plantR::worldMap
 
-# Make world and worldMap have the same units, i.e., add the missing caspian sea
-setdiff(worldMap$NAME_0, world$name)
-get_these <- which(worldMap$NAME_0 %in% "caspian sea")
-caspian <- worldMap[get_these, ]
-names(caspian) <- names(world)
-world <- rbind(world, caspian)
-
 # Loading internal functions
-devtools::load_all()
+# devtools::load_all()
 
 # Preparing GBIF data -----------------------------------------------------
 
@@ -296,28 +289,29 @@ for(i in family_names){
     
     # Data standardization ----------------------------------------------------
     
-    
+    cat("Standardizing data \n")  
+  
     ##### Standardizing collection codes #####
     gbif_data <- plantR::getCode(gbif_data) # later update plantR:::collectionCodes with 00_get_collections.R
     
     ##### Standardizing names of collectors and determiners #####
     
     # First collector
-    gbif_data$recordedBy.new <- my_prepName(gbif_data$recordedBy,
-                                            output = "first",
-                                            sep.out = "; ")
+    gbif_data$recordedBy.new <- plantR::prepName(gbif_data$recordedBy,
+                                                 output = "first",
+                                                 sep.out = "; ")
     # Auxilliary collectors
-    gbif_data$recordedBy.aux <- my_prepName(gbif_data$recordedBy,
-                                            output = "aux",
-                                            sep.out = "; ")
+    gbif_data$recordedBy.aux <- plantR::prepName(gbif_data$recordedBy,
+                                                 output = "aux",
+                                                 sep.out = "; ")
     # First determiner
-    gbif_data$identifiedBy.new <- my_prepName(gbif_data$identifiedBy,
-                                              output = "first",
-                                              sep.out = "; ")
+    gbif_data$identifiedBy.new <- plantR::prepName(gbif_data$identifiedBy,
+                                                   output = "first",
+                                                   sep.out = "; ")
     # Auxilliary determiners
-    gbif_data$identifiedBy.aux <- my_prepName(gbif_data$identifiedBy,
-                                              output = "aux",
-                                              sep.out = "; ")
+    gbif_data$identifiedBy.aux <- plantR::prepName(gbif_data$identifiedBy,
+                                                   output = "aux",
+                                                   sep.out = "; ")
     
     # Name notations
     gbif_data$recordedBy.new <- plantR::missName(gbif_data$recordedBy.new,
@@ -336,12 +330,14 @@ for(i in family_names){
     # Collection and identification year #### Check with Renato: plantR::getYear("01/02/99") ####
     # if we use as.Date("01/02/99", format = "%d/%m/%y") we get 1999 but this may well be 1899...
     
-    gbif_data$year.new <- plantR::getYear(gbif_data$year, noYear = "n.d.")
-    gbif_data$yearIdentified.new <- plantR::getYear(gbif_data$dateIdentified, noYear = "n.d.")
-    
+    gbif_data$year.new <- plantR::getYear(gbif_data$year, 
+                                          noYear = "n.d.")
+    gbif_data$yearIdentified.new <- plantR::getYear(gbif_data$dateIdentified, 
+                                                    noYear = "n.d.")
     
     # Data editing ------------------------------------------------------------
     
+    cat("Editing data \n")
     
     # Formatting locality information at different scales
     gbif_data <- plantR::fixLoc(gbif_data,
@@ -384,6 +380,7 @@ for(i in family_names){
     
     # Data validation ---------------------------------------------------------
     
+    cat("Validating data \n")
     
     # Validating locality information
     gbif_data <- plantR::validateLoc(gbif_data)
@@ -395,13 +392,13 @@ for(i in family_names){
                                                   "country.gazet"))
     
     # Validating coordinates due to rounding precision
-    gbif_data <- my_checkBorders(gbif_data, output = "same.col")
+    gbif_data <- plantR::checkBorders(gbif_data, output = "same.col")
     
     # Validating coordinates in the sea but close to the shore
     gbif_data <- plantR::checkShore(gbif_data, output = "same.col")
     
     # Validating inverted and swapped coordinates
-    gbif_data <- my_checkInverted(gbif_data, output = "same.col")
+    gbif_data <- plantR::checkInverted(gbif_data, output = "same.col")
     
     # Validating records from cultivated individuals
     gbif_data <- plantR::getCult(gbif_data)
@@ -410,19 +407,20 @@ for(i in family_names){
     gbif_data <- plantR::checkOut(gbif_data, tax.name = "scientificName")
     
     # Validating records that are falling outside of the species' indicated botanical country
-    gbif_data <- checkDist(gbif_data, 
-                           tax.names = c("taxonName", "taxonAuthor"),
-                           loc = "loc.correct",
-                           source = "wcvp")
+    gbif_data <- plantR::checkDist(gbif_data,
+                                   tax.names = c("taxonName", "taxonAuthor"),
+                                   loc = "loc.correct",
+                                   source = "wcvp")
     
     # Validating confidence level of species determinators
     gbif_data <- plantR::validateTax(gbif_data)
     
-    # Saving by collection and separating by family
+    # Saving by collection and separating by family 
     plantR::saveData(gbif_data,
-                     dir.name = i,
+                     dir.name = paste0(i, 1),
                      path = file_path,
                      by = "family",
                      file.format = "rds",
                      compress = TRUE)
     }
+    

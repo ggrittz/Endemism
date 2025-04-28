@@ -17,7 +17,7 @@ if(!dir.exists(file_path))
 
 # Remove previously cleaned families
 families_done <- list.dirs(here::here("data", "derived-data", "Cleaned_occs"), 
-                           full.names = FALSE)
+                          full.names = FALSE)
 families_done <- families_done[!grepl("^$", families_done)]
 family_names <- setdiff(family_names, families_done)
 
@@ -26,38 +26,40 @@ for (i in family_names) {
   cat("Cleaning duplicates for", i, "\n")
   family_data <- vector("list", length(sources))
   
-  # Loop through sources
   for (j in seq_along(sources)) {
-    
-    # List all family folders inside each source folder
     family_folders <- list.dirs(sources[j], recursive = FALSE)
+    temp_list <- list()
     
-    # Loop through all family folders to find .rds files
     for (k in family_folders) {
-      # Check if the folder contains an .rds file matching the family name
       rds_files <- list.files(k, pattern = paste0(i, "\\.rds$"), full.names = TRUE)
       
-      # If any matching .rds file is found, read and store it
-      if (length(rds_files) > 0) {
-        for (rds_file in rds_files) {
-          # Read the .rds file
-          data <- readRDS(rds_file)
-          
-          # Check for "no.coords" and convert to NA
-          if ("out.check" %in% colnames(data)) {
-            data$out.check <- ifelse(data$out.check == "no.coords", NA, data$out.check)
-          }
-          
-          # Store the data for this family from this source
-          family_data[[j]] <- data
+      for (rds_file in rds_files) {
+        data <- readRDS(rds_file)
+        
+        if ("out.check" %in% colnames(data)) {
+          data$out.check <- ifelse(data$out.check == "no.coords", NA, data$out.check)
         }
+        
+        # Convert all columns to character
+        data[] <- lapply(data, as.character)
+        temp_list <- append(temp_list, list(data))
       }
+    }
+    
+    if (length(temp_list) > 0) {
+      family_data[[j]] <- dplyr::bind_rows(temp_list)
     }
   }
   
-  family_data <- dplyr::bind_rows(family_data)
+  family_data <- family_data[!sapply(family_data, is.null)]
   
-  if(nrow(family_data) == 0){
+  if (length(family_data) > 0) {
+    family_data <- dplyr::bind_rows(family_data)
+  } else {
+    family_data <- NULL
+  }
+  
+  if(nrow(family_data) == 0 || is.null(family_data)){
     cat("Skipping", " ", i, ":", " no registers found\n", sep = "")
     dir.create(file.path(file_path, i), showWarnings = FALSE)
     next
