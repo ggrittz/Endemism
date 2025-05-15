@@ -2,35 +2,34 @@
 # Crossing areas with plantR map ------------------------------------------
 
 # Loading data
-
-##### Already worked with #####
-# nt_dis <- terra::vect(here::here("data", "derived-data", "maps", "NTAmericas_dissolved.shp"))
-# nt_efg <- terra::vect(here::here("data", "derived-data", "maps", "NTAmericas_efgs.shp"))
 latamMap <- plantR::latamMap
 latamMap <- dplyr::bind_rows(latamMap)
 latamMap <- terra::vect(latamMap)
-
-# Converting to sf to intersect (TopologyException error in terra)
-latamMap <- terra::simplifyGeom(latamMap, tolerance = 0.00001)
-# nt_dis <- terra::simplifyGeom(nt_dis, tolerance = 0.00001)
-# Comparable column to get duplicates later (municipality level)
+# To compare later
 latamMap$NAME_all <- paste(latamMap$NAME_0,
-                           latamMap$NAME_1,
-                           latamMap$NAME_2,
-                           latamMap$NAME_3,
-                           1:dim(latamMap)[1],
-                           sep = "_")
+                            latamMap$NAME_1,
+                            latamMap$NAME_2,
+                            latamMap$NAME_3,
+                            1:dim(latamMap)[1],
+                            sep = "_")
 
-##### Already performed #####
-# Intersect against the Palearctic+Neotropical+Andean map
+# ##### Already worked with #####
+# nt_dis <- terra::vect(here::here("data", "derived-data", "maps", "NTAmericas_dissolved.shp"))
+# nt_efg <- terra::vect(here::here("data", "derived-data", "maps", "NTAmericas_efgs.shp"))
+# 
+# # Converting to sf to intersect (TopologyException error in terra)
+# latamMap <- terra::simplifyGeom(latamMap, tolerance = 0.00001)
+# nt_dis <- terra::simplifyGeom(nt_dis, tolerance = 0.00001)
+# 
+# # Intersect against the Palearctic+Neotropical+Andean map
 # latamMap_nt <- terra::intersect(latamMap, nt_dis)
 # latamMap_nt$Morrone_re <- gsub("Neotropical_temperate", "Neotropical temperate",
-#                                latamMap_nt$Morrone_re)
+#                              latamMap_nt$Morrone_re)
 # 
 # latamMap_efg <- terra::intersect(latamMap, nt_efg)
 # latamMap_efg$Morrone_re <- gsub("Neotropical_temperate", "Neotropical temperate",
-#                                 latamMap_efg$Morrone_re)
-# Save these maps since it takes some time to run this intersection
+#                               latamMap_efg$Morrone_re)
+# # Save these maps since it takes some time to run this intersection
 # file_path <- here::here("data", "derived-data", "maps")
 # file_name1 <- "latamMap_intersected_efg.shp"
 # file_name <- "latamMap_intersected_nt.shp"
@@ -82,7 +81,7 @@ dups1_agg_wide <- tidyr::pivot_wider(dups1_agg,
 dups1_agg_wide <- as.data.frame(dups1_agg_wide)
 
 # Initialize new columns
-dups1_agg_wide$Morrone_re_new <- NA_character_
+dups1_agg_wide$Morrone_re_new <- NA
 
 # Get all the percentage and area column names
 perc_cols <- grep("_realmPercentage$", names(dups1_agg_wide), value = TRUE)
@@ -203,7 +202,7 @@ dups1_agg_wide <- tidyr::pivot_wider(dups1_agg,
 dups1_agg_wide <- as.data.frame(dups1_agg_wide)
 
 # Initialize new columns
-dups1_agg_wide$our_efg_new <- NA_character_
+dups1_agg_wide$our_efg_new <- NA
 
 # Get all the percentage and area column names
 perc_cols <- grep("_efgPercentage$", names(dups1_agg_wide), value = TRUE)

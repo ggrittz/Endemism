@@ -16,10 +16,10 @@ if(!dir.exists(file_path))
   dir.create(file_path)
 
 # Remove previously cleaned families
-families_done <- list.dirs(here::here("data", "derived-data", "Cleaned_occs"), 
-                          full.names = FALSE)
-families_done <- families_done[!grepl("^$", families_done)]
-family_names <- setdiff(family_names, families_done)
+# families_done <- list.dirs(here::here("data", "derived-data", "Cleaned_occs"), 
+#                           full.names = FALSE)
+# families_done <- families_done[!grepl("^$", families_done)]
+# family_names <- setdiff(family_names, families_done)
 
 # Loop through families
 for (i in family_names) {
@@ -73,8 +73,8 @@ for (i in family_names) {
   # Start processing the duplicates -----------------------------------------
   
   # Creating unique record identifiers
-  family_data$numTombo <- my_getTombo(collection = family_data[, c("collectionCode.new")],
-                                      accession = family_data[, c("catalogNumber")])
+  family_data$numTombo <- plantR::getTombo(collection = family_data[, c("collectionCode.new")],
+                                           accession = family_data[, c("catalogNumber")])
   
   # Creating strings with diff. sets of information to search for duplicates
   dups <- plantR::prepDup(family_data,
@@ -119,5 +119,9 @@ for (i in family_names) {
                    by = "family",
                    file.format = "rds",
                    compress = TRUE)
-
+  
+  # Save as .gz.csv
+  data.table::fwrite(family_data, file.path(file_path, i, paste0(i, ".csv.gz")))
+  # Save as .parquet
+  arrow::write_parquet(family_data, file.path(file_path, i, paste0(i, ".parquet")))
 }
