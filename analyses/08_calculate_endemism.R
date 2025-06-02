@@ -66,7 +66,7 @@ devtools::load_all()
 file_path <- here::here("data", "derived-data", "Endemic_species")
 family_names <- readRDS(here::here("data", "derived-data", "family_names.rds"))
 
-  # Region maps
+# Region maps
 tropical_america <- here::here("data", "derived-data", "maps", "NTAmericas_dissolved.shp")
 tropical_america <- terra::vect(tropical_america, crs = "epsg:4326")
 tropical_america <- tropical_america[tropical_america$Morrone_re %in% "Neotropical", ]
@@ -259,21 +259,24 @@ coords <- data.frame(raster::coordinates(we_map_area$WE_raster))
 values <- data.frame(raster::values(we_map_area$WE_raster))
 names(values) <- "we"
 my_we_df <- cbind.data.frame(coords, values)
-my_we_raster <- terra::rast(my_we_df, crs = "epsg:4326", type = "xyz")
+my_we_pts <- my_we_df[!is.na(my_we_df$we), ]
 
-# Non-NA points used for interpolation
-my_we_pts <- terra::vect(my_we_df[!is.na(my_we_df$we), ], geom = c("x", "y"),
-                         crs = "epsg:4326")
+# Convert the {raster} map to {terra}
+my_we_raster <- terra::rast(we_map_area$WE_raster)
+
 # Grid to interpolate
 my_we_grid <- terra::rast(extent = terra::ext(my_we_raster),
                           resolution = terra::res(my_we_raster),
                           crs = terra::crs(my_we_raster))
+my_we_grid <- terra::as.data.frame(my_we_grid, xy = TRUE, na.rm = FALSE)
+my_we_grid$lyr.1 <- NULL
 
-# Kriging Interpolation
-pts1 <- terra::as.data.frame(my_we_df[!is.na(my_we_df$we), ], geom = "XY")
-sp::coordinates(pts1) <- ~x+y
+
+##### Method 1: Ordinary Kriging interpolation #####
+my_we_pts_sp <- my_we_pts
+sp::coordinates(my_we_pts_sp) <- ~x+y
 # Make variogram
-v <- automap::autofitVariogram(we ~ 1, pts1)
+v <- automap::autofitVariogram(we ~ 1, my_we_pts_sp)
 vario <- v$var_model
 krig_mod <- gstat::gstat(id = "we",
                          formula = we ~ 1,
@@ -285,43 +288,73 @@ krig_mod <- gstat::gstat(id = "we",
                                             kappa = 0.4),
                          nmax = 20)
 
-# Predict on the grid
-pred_krig <- terra::interpolate(object = my_we_grid,
-                                model = krig_mod,
-                                fun = predict,
-                                na.rm = TRUE)
+# Predict the omdel in the grid
+my_we_grid$krig.fit <- predict(krig_mod, my_we_grid)$we.pred
+
+
+# Method 2: Loess interpolation -------------------------------------------
+loess_mod <- loess(formula = we ~ x * y,
+                   span = 0.2,
+                   degree = 2,
+                   surface = 'interpolate',
+                   family = 'gaussian',
+                   se = TRUE,
+                   normalize = TRUE,
+                   data = my_we_pts)
+
+# Predict the model in the grid
+my_we_grid$loess.fit <- predict(loess_mod, my_we_grid)
+my_we_grid$loess.fit[is.na(my_we_grid$loess.fit)] <- 0
+my_we_grid$loess.fit[my_we_grid$loess.fit < 0] <- 0
+
+
+# Inverse distance weighting ----------------------------------------------
+idw_mod <- gstat::gstat(id = "we",
+                        formula = we ~ 1,
+                        locations = ~x+y,
+                        set = list(idp = 2),
+                        data = my_we_pts)
+
+# Predict the model in the grid
+my_we_grid$idw.fit <- predict(idw_mod, my_we_grid)$we.pred
+
+
+# Convert to raster for cropping, masking, and plotting
+my_we_grid <- terra::rast(my_we_grid, type = "xyz", crs = "epsg:4326")
 
 # Crop and mask
-interpolated2 <- terra::crop(pred_krig, tropical_america)
-interpolated2 <- terra::mask(interpolated2, tropical_america)
+my_int <- terra::crop(my_we_grid, tropical_america)
+my_int <- terra::mask(my_int, tropical_america)
 
-# Get 90th quantile
-threshold <- terra::global(interpolated2$we.pred, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
+# Get 90th quantile for each case
+th_we <- as.numeric(raster::quantile(we_map_area$WE_raster, probs = 0.9, na.rm = TRUE))
+th_krig <- terra::global(my_int$krig.fit, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
+th_loess <- terra::global(my_int$loess.fit, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
+th_idw <- terra::global(my_int$idw.fit, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
+
+# Convert WE map to terra
+we_map <- terra::rast(we_map_area$WE_raster)
+terra::values(we_map) <- terra::values(we_map_area$WE_raster)
+terra::plot(we_map, col = terrain.colors(100, rev = TRUE))
 
 # Plot
-terra::plot(interpolated2$we.pred, col = terrain.colors(100, rev = TRUE),
-            legend = FALSE)
-contour(interpolated2$we.pred, 
-        add = TRUE, 
-        levels = threshold,  
-        col = "black",       
-        lwd = 1)
-terra::plot(efg, add = TRUE, lwd = 0.1)
-
-
-
-
-
-
-
-# Save this interpolated map
-path_to_save2 <- here::here("data", "derived-data", "maps")
-terra::writeRaster(interpolated2, file.path(path_to_save2, "we_area_kriging_100km.tiff"))
-
-
-
-
-
+par(mfrow = c(2, 2))
+# WE map
+terra::plot(we_map, col = terrain.colors(100, rev = TRUE), legend = FALSE,
+            main = "Weigted Endemism (EOO)")
+terra::contour(we_map, add = TRUE, levels = th_we, col = "black", lwd = 1)
+# Kriging map
+terra::plot(my_int$krig.fit, col = terrain.colors(100, rev = TRUE), legend = FALSE,
+            main = "Kriging predictions")
+terra::contour(my_int$krig.fit, add = TRUE, levels = th_krig, col = "black", lwd = 1)
+# IDW map
+terra::plot(my_int$idw.fit, col = terrain.colors(100, rev = TRUE), legend = FALSE,
+            main = "IDW predictions")
+terra::contour(my_int$idw.fit, add = TRUE, levels = th_loess, col = "black", lwd = 1)
+# Loess map
+terra::plot(my_int$loess.fit, col = terrain.colors(100, rev = TRUE), legend = FALSE,
+            main = "Loess predictions")
+terra::contour(my_int$loess.fit, add = TRUE, levels = th_loess, col = "black", lwd = 1)
 
 
 

@@ -22,19 +22,16 @@
 
 # Variables
 # Occurrence fields downloaded via https://specieslink.net/
-# "datelastmodified" "basisofrecord" "coordinateprecision" "county" "daycollected" "dayidentified" 
-# "notes" "genus" "latitude" "longitude" "monthcollected" "monthidentified" "collector" "collectornumber" 
-# "scientificnameauthor" "verbatimlatitude" "verbatimlongitude" "yearidentified" "catalognumber" "collectioncode" 
-# "country" "family" "identifiedby" "institutioncode" "locality" "scientificname" "scientificnameauthor"
 
-# SPECIESLINK_LINK="https://specieslink.net/search/download/20250214110616-0021573"
+# Data version 21/05/2025
+SPECIESLINK_LINK="https://specieslink.net/search/download/20250521111752-0018886"
 OCCURRENCE_FILE="/d/speciesLink_occurrences.txt"
 SPECS_FILE="/d/Doutorado/SynTreeSys/Endemism/data/derived-data/spp_names.txt"
-FILTERED_OUTPUT="speciesLink_occurrences_filtered.txt"
-FINAL_OUTPUT="/d/speciesLink_occurrences_zipped.zip"
+FILTERED_OUTPUT="/d/speciesLink_occurrences_filtered.txt"
+FINAL_OUTPUT="/d/speciesLink_occurrences_filtered.zip"
 
 # Step 1: Download the file from speciesLink
-# wget -O "$OCCURRENCE_FILE" "$SPECIESLINK_LINK"
+wget -O "$OCCURRENCE_FILE" "$SPECIESLINK_LINK"
 
 # Step 2: Extract and save the header from the .txt file
 HEADER=$(head -n 1 "$OCCURRENCE_FILE")
