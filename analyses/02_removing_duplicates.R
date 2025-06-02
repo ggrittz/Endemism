@@ -66,9 +66,9 @@ for (i in family_names) {
   }
   
   # Remove irrelevant additional columns used before
-  to_remove <- c("datelastmodified", "scientificname_full",
-                 "scientificName.1", "gbifID")
-  family_data <- family_data[, -which(colnames(family_data) %in% to_remove)]
+  #to_remove <- c("datelastmodified", "scientificname_full",
+  #               "scientificName.1", "gbifID")
+  #family_data <- family_data[, -which(colnames(family_data) %in% to_remove)]
   
   # Start processing the duplicates -----------------------------------------
   
@@ -123,5 +123,5 @@ for (i in family_names) {
   # Save as .gz.csv
   data.table::fwrite(family_data, file.path(file_path, i, paste0(i, ".csv.gz")))
   # Save as .parquet
-  arrow::write_parquet(family_data, file.path(file_path, i, paste0(i, ".parquet")))
+  # arrow::write_parquet(family_data, file.path(file_path, i, paste0(i, ".parquet")))
 }

@@ -13,6 +13,11 @@ latamMap$NAME_all <- paste(latamMap$NAME_0,
                             1:dim(latamMap)[1],
                             sep = "_")
 
+# Do the same for the gazetteers
+gaz <- plantR:::gazetteer
+gaz <- terra::vect(gaz, geom = c("longitude.gazetteer", "latitude.gazetteer"),
+                   crs = "epsg:4326")
+
 # ##### Already worked with #####
 # nt_dis <- terra::vect(here::here("data", "derived-data", "maps", "NTAmericas_dissolved.shp"))
 # nt_efg <- terra::vect(here::here("data", "derived-data", "maps", "NTAmericas_efgs.shp"))
@@ -24,17 +29,34 @@ latamMap$NAME_all <- paste(latamMap$NAME_0,
 # # Intersect against the Palearctic+Neotropical+Andean map
 # latamMap_nt <- terra::intersect(latamMap, nt_dis)
 # latamMap_nt$Morrone_re <- gsub("Neotropical_temperate", "Neotropical temperate",
-#                              latamMap_nt$Morrone_re)
+#                             latamMap_nt$Morrone_re)
+# # Do the same for gaz
+# gaz_nt <- terra::intersect(gaz, nt_dis)
+# gaz_nt$Morrone_re <- gsub("Neotropical_temperate", "Neotropical temperate",
+#                           gaz_nt$Morrone_re)
 # 
+# # Intersect against the EFGs
 # latamMap_efg <- terra::intersect(latamMap, nt_efg)
 # latamMap_efg$Morrone_re <- gsub("Neotropical_temperate", "Neotropical temperate",
-#                               latamMap_efg$Morrone_re)
+#                              latamMap_efg$Morrone_re)
+# # Do the same for gaz
+# gaz_efg <- terra::intersect(gaz, nt_efg)
+# gaz_efg$Morrone_re <- gsub("Neotropical_temperate", "Neotropical temperate",
+#                            gaz_efg$Morrone_re)
+# 
 # # Save these maps since it takes some time to run this intersection
 # file_path <- here::here("data", "derived-data", "maps")
-# file_name1 <- "latamMap_intersected_efg.shp"
 # file_name <- "latamMap_intersected_nt.shp"
+# file_name1 <- "latamMap_intersected_efg.shp"
+# file_name2 <- "gaz_intersected_nt.shp"
+# file_name3 <- "gaz_intersected_efg.shp"
 # terra::writeVector(latamMap_nt, file.path(file_path, file_name), overwrite = TRUE)
 # terra::writeVector(latamMap_efg, file.path(file_path, file_name1), overwrite = TRUE)
+# terra::writeVector(gaz_nt, file.path(file_path, file_name2), overwrite = TRUE)
+# terra::writeVector(gaz_efg, file.path(file_path, file_name3), overwrite = TRUE)
+
+
+
 
 # Read here the maps saved above
 file_path <- here::here("data", "derived-data", "maps")
@@ -342,7 +364,7 @@ latamMap <- terra::as.data.frame(latamMap, geom = "WKT")
 # to efg area? (and percentage)
 get_these <- !grepl("predominant|\\|", latamMap$our_efg_new)
 
-# 2. For each target row:
+# 2. For each row:
 for(i in which(get_these)) {
   efg_name <- latamMap$our_efg_new[i]
   percentage_col <- paste0(efg_name, "_efgPercentage")

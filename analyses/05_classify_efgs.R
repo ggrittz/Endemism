@@ -1,5 +1,18 @@
 
 
+
+
+
+
+##### REMOVE THIS SCRIPT AFTER GETTING THE COOL COLOR PALETTE #####
+
+
+
+
+
+
+
+
 # This script seems useless now since everything is been done in 04_
 # But confirm later
 # Classify missing EFGs ---------------------------------------------------

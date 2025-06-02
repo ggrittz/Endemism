@@ -208,7 +208,11 @@ for(i in family_names){
     gbif_data <- plantR::getCult(gbif_data)
     
     # Validating spatial outliers
-    gbif_data <- plantR::checkOut(gbif_data, tax.name = "scientificName")
+    gbif_data <- plantR::checkOut(gbif_data, 
+                                  tax.name = "scientificName",
+                                  clas.cut = 2.5,
+                                  rob.cut = 12,
+                                  keep.values = TRUE)
     
     # Validating records that are falling outside of the species' indicated botanical country
     gbif_data <- plantR::checkDist(x = gbif_data,
