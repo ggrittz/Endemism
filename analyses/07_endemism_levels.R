@@ -51,20 +51,83 @@ our_names <- readRDS(here::here("data", "derived-data", "checklist_standardized.
 our_names <- our_names[!duplicated(our_names$our_accepted_scientificName), ]
 
 
-##### Not sure if necessary in the current plantR version... #####
-# ##### Loading raw gazetteer to solve cases where the maximum res. is country #####
-# raw_gaz <- read.csv(here::here("data", "raw-data", "raw-gazetteer.csv"))
-# 
-# # Filter for only North/Central/South American countries
-# regions <- rnaturalearth::ne_countries(returnclass = "sv")
-# regions <- regions[regions$subregion %in% c("Caribbean", "Central America",
-#                                           "South America", "Northern America"), ]
-# regions <- regions[, c("iso_a2", "subregion")]
-# regions <- terra::as.data.frame(regions, geom = NULL)
-# raw_gaz <- dplyr::left_join(raw_gaz, regions, by = c("country_code" = "iso_a2"))
-# raw_gaz <- raw_gaz[!is.na(raw_gaz$subregion), ]
-# raw_gaz <- raw_gaz[, c("NAME_0", "NAME_1", "NAME_2", "NAME_3", "NAME_4")]
-# raw_gaz <- raw_gaz[!duplicated(raw_gaz), ]
+##### Just to get some values... #####
+##### TOTAL VALUES OF FAMILIES, GENUS, SPECIES THAT OCCUR IN NEOTROPICS #####
+##### not necessarily endemics!!! #####
+ fam_list <- list()
+ cols <- c("tax.check1", "geo.check1", "origin.coord1", "cult.check1", 
+           "country.new","dist.check", "out.check", "scientificName", "family",
+           "decimalLatitude.new1", "decimalLongitude.new1")
+ for(i in family_names){
+   cat("Loading", i, "to summarise here", "\n")
+   gz_path <- file.path(file_path1, i, paste0(i, ".csv.gz"))
+   if(!file.exists(gz_path)){
+     next
+   }
+   # Load only the specified columns
+   family_data <- data.table::fread(gz_path, select = cols)
+   # Converting D² distances to probabilities using the Chi-square dist.
+   # degrees of freedom == 2 since we have two-dimensions (lon/lat)
+   df <- 2
+   alpha <- 0.025 # using 2.5% here as p-value threshold
+   critVal <- qchisq(p = 1 - alpha, df = df)
+   family_data$chisq.out.robust <- family_data$maha.robust > critVal
+   fam_list[[i]] <- family_data
+ }
+ fam_list <- dplyr::bind_rows(fam_list) # 66,412,445 non dup records
+ fam_list <- fam_list[fam_list$tax.check %in% "high", ] 
+ fam_list <- fam_list[grepl("^ok_|shore", fam_list$geo.check), ]
+ big_countries <- c("brazil", "colombia", "peru", "bolivia", 
+                    "venezuela", "argentina", "mexico", "chile") ##### add algo sobre esse corte #####
+ fam_list <- fam_list[!(fam_list$country.new %in% big_countries &
+                                grepl("^ok_country($|\\[|_)", fam_list$geo.check)), ]
+ fam_list <- fam_list[grepl("coord_gazet|coord_original",fam_list$origin.coord), ]
+ fam_list <- fam_list[!fam_list$cult.check %in% c("cultivated", "prob_cultivated"), ]
+ fam_list <- fam_list[(!fam_list$dist.check %in% "bad_dist" &
+                               !fam_list$chisq.out.robust %in% TRUE), ] # 1,819,151 records after all filters
+ # fam_list <- fam_list[!(is.na(fam_list$out.check) & 
+ #                          fam_list$dist.check %in% "bad_dist"), ]
+ 
+ # Get life form classification from our list
+ fam_list <- dplyr::left_join(fam_list, our_names[, c("our_accepted_scientificName", 
+                                                       "lifeForm_aggregated")],
+                              by = c("scientificName" = "our_accepted_scientificName"))
+ fam_list$decimalLatitude.new <- as.numeric(fam_list$decimalLatitude.new)
+ fam_list$decimalLongitude.new <- as.numeric(fam_list$decimalLongitude.new)
+ fam_list <- terra::vect(fam_list, geom = c("decimalLongitude.new",
+                                            "decimalLatitude.new"),
+                         crs = "epsg:4326")
+ fam_list$is_nt <- terra::is.related(x = fam_list,
+                                     y = tropical_america,
+                                     "intersects")
+ 
+ ##### How many families? #####
+ length(unique(fam_list$family[fam_list$is_nt %in% TRUE & # 241 for shrubs
+                                 grepl("tree|shrub", 
+                                       fam_list$lifeForm_aggregated)])) # 216 families
+ # How many genus?
+ length(unique(sapply(strsplit(fam_list$scientificName[fam_list$is_nt %in% TRUE &
+                                                         grepl("tree|shrub", 
+                                                               fam_list$lifeForm_aggregated)], " "), 
+                      function(x) x[1]))) # 2,088 genus # 2,855 for shrubs
+ 
+ # How many species?
+ length(unique(fam_list$scientificName[fam_list$is_nt %in% TRUE &  # 27,025 in Neotropics 42,558 for shrubs
+                                         grepl("tree|shrub", 
+                                               fam_list$lifeForm_aggregated)]))
+ 
+
+ 
+ fam_list$decimalLatitude.new <- as.numeric(fam_list$decimalLatitude.new)
+ fam_list$decimalLongitude.new <- as.numeric(fam_list$decimalLongitude.new)
+ fam_list <- terra::vect(fam_list, geom = c("decimalLongitude.new",
+                                            "decimalLatitude.new"),
+                         crs = "epsg:4326")
+ fam_list$is_nt <- terra::is.related(x = fam_list,
+                                     y = tropical_america,
+                                                   "intersects")
+
+#
 
 
 
@@ -86,9 +149,11 @@ for(i in family_names){
   # family_data <- Lauraceae
   family_data$ids <- 1:nrow(family_data)
   
-  # Keep only records validated by a taxonomists ($tax.check == 'high')
+  # REMOVING THIS STEP FOR NOW #
+  ##### Keep only records validated by a taxonomists ($tax.check == 'high') #####
   # high_names <- unique(all_fam$scientificName[all_fam$tax.check %in% "high"])
-  family_data <- family_data[family_data$tax.check %in% "high", ]
+  # family_data <- family_data[family_data$tax.check %in% "high", ]
+  
   # Get only "trees" lifeForm
   family_data <- dplyr::left_join(family_data, 
                                   our_names[, c("our_accepted_scientificName",
@@ -98,17 +163,17 @@ for(i in family_names){
   
   ##### Removing unusable data #####
   # Geo check: keep only ok_ and MAYBE add SHORE?
-  family_data <- family_data[grepl("^ok_|shore", family_data$geo.check), ]
+  family_data <- family_data[grepl("^ok_|shore", family_data$geo.check1), ]
 
   # Do not use ok_country if the coordinate came from a very big country due to
   # the centroid being a fake indicative of efg
   big_countries <- c("brazil", "colombia", "peru", "bolivia", 
                      "venezuela", "argentina", "mexico", "chile")
   family_data <- family_data[!(family_data$country.new %in% big_countries &
-                                 grepl("^ok_country($|\\[|_)", family_data$geo.check)), ]
+                                 grepl("^ok_country($|\\[|_)", family_data$geo.check1)), ]
   
   # Coord check: keep only records with coordinates
-  family_data <- family_data[grepl("coord_gazet|coord_original", family_data$origin.coord), ]
+  family_data <- family_data[grepl("coord_gazet|coord_original", family_data$origin.coord1), ]
   
   # Cult check: keep only non-cultivated registers (make this better before: taxonomic list)
   family_data <- family_data[!family_data$cult.check %in% c("cultivated", "prob_cultivated"), ]
@@ -119,7 +184,7 @@ for(i in family_names){
   # degrees of freedom == 2 since we have two-dimensions (lon/lat)
   df <- 2
   alpha <- 0.025 # using 2.5% here as p-value threshold
-  critVal <- qchisq(1 - alpha, df = df)
+  critVal <- qchisq(p = 1 - alpha, df = df)
   family_data$chisq.out.robust <- family_data$maha.robust > critVal
   family_data <- family_data[(!family_data$dist.check %in% "bad_dist" &
                                 # !family_data$out.check %in% TRUE &
@@ -132,15 +197,15 @@ for(i in family_names){
                                  family_data$dist.check %in% "bad_dist"), ]
   
   # Convert coordinate character columns to numeric
-  family_data$decimalLatitude.new <- as.numeric(family_data$decimalLatitude.new)
-  family_data$decimalLongitude.new <- as.numeric(family_data$decimalLongitude.new)
+  family_data$decimalLatitude.new1 <- as.numeric(family_data$decimalLatitude.new1)
+  family_data$decimalLongitude.new1 <- as.numeric(family_data$decimalLongitude.new1)
   
   # Cross-check the register with original coordinates against the maps
-  with_coord_orig <- which(family_data$origin.coord %in% "coord_original")
+  with_coord_orig <- which(family_data$origin.coord1 %in% "coord_original")
   # Convert to SpatVect
   family_data_coord_orig <- terra::vect(family_data[with_coord_orig, ],
-                                   geom = c("decimalLongitude.new",
-                                            "decimalLatitude.new"))
+                                   geom = c("decimalLongitude.new1",
+                                            "decimalLatitude.new1"))
   terra::crs(family_data_coord_orig) <- "epsg:4326"
   
   # Cross with Neotropical map and EFG map
@@ -178,7 +243,7 @@ for(i in family_names){
                                      by = "ids")
   
   # Now, simply merge coord_gazet with latamMap info
-  with_coord_gazet <- which(family_data$origin.coord %in% "coord_gazet")
+  with_coord_gazet <- which(family_data$origin.coord1 %in% "coord_gazet")
   result_df_gazet <- dplyr::left_join(x = family_data[with_coord_gazet, ],
                                       y = latam_gaz[, c("loc_gaz", "our_efg_new")],
                                       by = c("loc.correct" = "loc_gaz"))
@@ -198,12 +263,12 @@ for(i in family_names){
   # Create a lookup vector from gaz (loc.correct -> our_efg)
   gaz_lookup <- setNames(gaz_efg$our_efg, gaz_efg$loc.correc)
   # Fill NAs by matching loc.correct values
-  family_data$our_efg[which_na] <- gaz_lookup[family_data$loc.correct[which_na]]
+  family_data$our_efg[which_na] <- gaz_lookup[family_data$loc.correct1[which_na]]
   
   # Do the same for the Neotropics gaz
   which_na <- which(is.na(family_data$is_nt))
   gaz_lookup <- setNames(gaz_nt$is_nt, gaz_nt$loc.correc)
-  family_data$is_nt[which_na] <- gaz_lookup[family_data$loc.correct[which_na]]
+  family_data$is_nt[which_na] <- gaz_lookup[family_data$loc.correct1[which_na]]
   
   # Remove non-Neotropical endemic species ----------------------------------
   
