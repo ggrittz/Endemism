@@ -1,0 +1,511 @@
+
+# Rarefaction and interpolation -------------------------------------------
+
+final_df <- readRDS(here::here("data", "derived-data", "rds",
+                               "final_df.rds"))
+we_map_area <- readRDS(here::here("data", "derived-data", "rds",
+                                  "we_map_area_50km.rds"))
+we_map_area_biomes <- readRDS(here::here("data", "derived-data", "rds",
+                                         "we_map_area_biomes_50km.rds"))
+efg_end <- readRDS(here::here("data", "derived-data", "rds", "end_per_efg.rds"))
+efg_end <- efg_end[!grepl("Transition|predominant", names(efg_end))]
+# only 15 remanining: three have no endemics and one have no records
+efg_names <- names(efg_end)
+
+# Study area
+tropical_america <- here::here("data", "derived-data", "maps", "NTAmericas_dissolved.shp")
+tropical_america <- terra::vect(tropical_america, crs = "epsg:4326")
+tropical_america <- tropical_america[tropical_america$Morrone_re %in% "Neotropical", ]
+
+
+# Dealing with sampling coverage ------------------------------------------
+# Convert the {raster} map to {terra}
+my_we_raster <- terra::rast(we_map_area$WE_raster, crs = "epsg:4326")
+terra::values(my_we_raster) <- raster::values(we_map_area$WE_raster)
+
+# Do the same for each biome map
+my_we_raster_biomes <- list()
+my_we_raster_biomes <- lapply(we_map_area_biomes, 
+                              function(x) {
+                                r <- terra::rast(x$WE_raster, crs = "epsg:4326")
+                                terra::values(r) <- terra::values(x$WE_raster)
+                                return(r)
+                              })
+
+# Convert occ points to spatial points
+final_df1 <- terra::vect(final_df, 
+                         geom = c("decimalLongitude.new",
+                                  "decimalLatitude.new"), 
+                         crs = "epsg:4326")
+
+# Get cell numbers for all points
+cell_numbers <- terra::cellFromXY(my_we_raster, terra::crds(final_df1))
+cell_numbers_biomes <- list()
+cell_numbers_biomes <- lapply(my_we_raster_biomes,
+                              function(x) {
+                                cells <- terra::cellFromXY(x, terra::crds(final_df1))
+                                cells[!is.na(cells)]
+                              })
+
+
+# Create a list split by cell numbers
+cell_species <- split(final_df1$scientificName, cell_numbers)
+
+cell_species_biomes <- list()
+# Need to split by the endemics to the biome and then the biome
+cell_species_biomes <- lapply(names(cell_numbers_biomes), function(x) {
+  # Get the endemic species for this biome
+  endemic_species <- efg_end[[x]]
+  # Filter the df to only include endemic species for this biome
+  filtered_df <- final_df1[final_df1$scientificName %in% endemic_species, ]
+  # Split
+  split(filtered_df$scientificName, cell_numbers_biomes[[x]])
+})
+names(cell_species_biomes) <- names(cell_numbers_biomes)
+
+# Keep only what exists
+cell_species_biomes <- lapply(cell_species_biomes, function(x) {
+  x[sapply(x, length) > 0]
+})
+
+# Count abundances per species per cell
+abundance_list <- lapply(cell_species, function(x) {
+  table(x)
+})
+abundance_list <- abundance_list[!is.na(names(abundance_list))]
+
+# Same for each species in each cell in each biome...
+abundance_list_biomes <- lapply(cell_species_biomes, function(x) {
+  lapply(x, function(z) {
+    table(z)
+  })
+})
+abundance_list_biomes <- lapply(abundance_list_biomes, function(x) {
+  x[!is.na(names(x))]
+})
+
+# Only the vector of values
+abundance_vectors <- lapply(abundance_list, as.vector)
+abundance_vectors_biomes <- lapply(abundance_list_biomes, function(x) {
+  lapply(x, as.vector)
+})
+
+# Measure the sampling coverage (considering N/cell as abundance data type)
+sc_df = iNEXT::DataInfo(abundance_vectors, datatype = "abundance")
+
+sc_df_biomes <- lapply(abundance_vectors_biomes, function(x) {
+  iNEXT::DataInfo(x, datatype = "abundance")
+})
+names(sc_df_biomes) <- names(abundance_vectors_biomes)
+
+# How sampling coverage and N are distributed inside each biome?
+summary_df <- do.call(rbind, lapply(names(sc_df_biomes), function(x) {
+  biome_data <- sc_df_biomes[[x]]
+  
+  data.frame(
+    Biome = x,
+    SC_max = max(biome_data$SC, na.rm = TRUE),
+    SC_min = min(biome_data$SC, na.rm = TRUE),
+    SC_mean = mean(biome_data$SC, na.rm = TRUE),
+    # SC_median = median(biome_data$SC, na.rm = TRUE),
+    n_max = max(biome_data$n, na.rm = TRUE),
+    n_min = min(biome_data$n, na.rm = TRUE),
+    n_mean = mean(biome_data$n, na.rm = TRUE),
+    # n_median = median(biome_data$n, na.rm = TRUE),
+    n_cells = nrow(biome_data)  # Number of cells in this biome
+  )
+}))
+
+
+# Asymptotic estimates for diversity metrics
+
+cl <- parallel::makeCluster(detectCores()-2)
+parallel::clusterEvalQ(cl, library("iNEXT"))
+parallel::clusterExport(cl, list("abundance_vectors"), envir = environment())
+
+tmp = parallel::parLapply(cl, 1:length(abundance_vectors), 
+                          fun = function(x) {
+                            current_abundance <- abundance_vectors[[x]]
+                            cell_name <- names(abundance_vectors)[x]
+                            
+                            tmp1 = iNEXT::iNEXT(current_abundance, 
+                                                datatype = "abundance", 
+                                                q = c(0, 2),
+                                                size = 100, 
+                                                endpoint = 100, 
+                                                knots = 2, 
+                                                se = FALSE)$AsyEst
+                            
+                            tmp1 <- data.frame(cell_id = cell_name,
+                                               Diversity = rownames(tmp1),
+                                               tmp1[, 1:3],
+                                               row.names = NULL)
+                            
+                            return(tmp1)
+                          })
+
+parallel::stopCluster(cl)
+
+# Convert results to data frame
+diversity_df = do.call("rbind.data.frame", tmp)
+
+
+##### Adapting the same code but for biomes separately #####
+
+cl <- parallel::makeCluster(detectCores()-2)
+parallel::clusterEvalQ(cl, library("iNEXT"))
+
+# Process each biome separately
+tmp_biomes <- lapply(names(abundance_vectors_biomes), function(biome_name) {
+  cat("Processing biome:", biome_name, "\n")
+  
+  biome_abundance <- abundance_vectors_biomes[[biome_name]]
+  parallel::clusterExport(cl, list("biome_abundance"), envir = environment())
+  
+  # Process each cell in this biome
+  tmp_biome <- parallel::parLapply(cl,
+                                   1:length(biome_abundance),
+                                   
+                                   fun = function(x) {
+                                     current_abundance <- biome_abundance[[x]]
+                                     cell_name <- names(biome_abundance)[x]
+                                     
+                                     tmp1 = iNEXT::iNEXT(current_abundance,
+                                                         datatype = "abundance",
+                                                         q = c(0, 2),
+                                                         size = 100,
+                                                         endpoint = 100,
+                                                         knots = 2,
+                                                         se = FALSE)$AsyEst
+                                     
+                                     tmp1 <- data.frame(biome = biome_name,
+                                                        cell_id = cell_name,
+                                                        Diversity = rownames(tmp1),
+                                                        tmp1[, 1:3],
+                                                        row.names = NULL)
+                                     return(tmp1)
+                                   }
+  )
+  do.call(rbind, tmp_biome)
+})
+names(tmp_biomes) <- efg_names
+
+parallel::stopCluster(cl)
+
+# Combine results from all biomes
+diversity_df_biomes <- do.call(rbind, tmp_biomes)
+
+
+##### Getting metrics, finally #####
+
+# Get only richness and Simpson
+rich_df <- diversity_df[grepl("Richness", diversity_df$Diversity), ]
+rich_df$cell_id <- as.numeric(rich_df$cell_id)
+names(rich_df)[which(names(rich_df) == "Estimator")] <- "S.est"
+simp_df <- diversity_df[grepl("Simpson", diversity_df$Diversity), ]
+simp_df$cell_id <- as.numeric(simp_df$cell_id)
+names(simp_df)[which(names(simp_df) == "Estimator")] <- "Simp.est"
+
+rich_df_biomes <- diversity_df_biomes[grepl("Richness", diversity_df_biomes$Diversity), ]
+rich_df_biomes$cell_id <- as.numeric(rich_df_biomes$cell_id)
+names(rich_df_biomes)[which(names(rich_df_biomes) == "Estimator")] <- "S.est"
+simp_df_biomes <- diversity_df_biomes[grepl("Simpson", diversity_df_biomes$Diversity), ]
+simp_df_biomes$cell_id <- as.numeric(simp_df_biomes$cell_id)
+names(simp_df_biomes)[which(names(simp_df_biomes) == "Estimator")] <- "Simp.est"
+
+
+##### Get this information back to the raster #####
+cell_id <- as.numeric(names(abundance_vectors))
+cell_id_biomes <- lapply(abundance_vectors_biomes, function(x) as.numeric(names(x)))
+
+
+
+############################################################################################
+############################################################################################
+############################################################################################
+################### PAREI AQUI #############################################################
+############################################################################################
+############################################################################################
+############################################################################################
+
+
+
+sc_df <- data.frame(cell_id = as.numeric(sc_df$Assemblage),
+                    n = sc_df$n,
+                    S.obs = sc_df$S.obs,
+                    Simp.obs = simp_df$Observed,
+                    SC = sc_df$SC)
+
+
+# Get coordinates for these specific cells
+cell_coords <- data.frame(cell_id = cell_id,
+                          x = terra::xFromCell(my_we_raster, cell_id),
+                          y = terra::yFromCell(my_we_raster, cell_id))
+# Now the metrics
+cell_metrics <- dplyr::left_join(sc_df,
+                                 cell_coords,
+                                 by = "cell_id")
+# cell_metrics <- dplyr::left_join(cell_metrics, diversity_df[, c(1, 4)],
+#                                  by = "cell_id")
+
+# Populate new layers
+my_we_raster <- c(my_we_raster,
+                  terra::rast(my_we_raster, nlyrs = 4))
+names(my_we_raster)[(terra::nlyr(my_we_raster)-3):terra::nlyr(my_we_raster)] <- 
+  c("SC", "n", "S.obs", "Simp.obs")
+
+my_we_raster[["SC"]][cell_metrics$cell_id] <- cell_metrics$SC
+my_we_raster[["n"]][cell_metrics$cell_id] <- cell_metrics$n
+my_we_raster[["S.obs"]][cell_metrics$cell_id] <- cell_metrics$S.obs
+my_we_raster[["Simp.obs"]][cell_metrics$cell_id] <- cell_metrics$Simp.obs
+
+# Which cells are going to be used for interpolation?
+my_we_raster1 <- terra::as.data.frame(my_we_raster, xy = TRUE, cells = TRUE)
+
+##### Using sample coverage and N cut-offs following Lima et al. 2020 #####
+
+# Get the quantiles for SC
+sc_quantiles <- quantile(my_we_raster1$SC, probs = c(0.25, 0.50, 0.75))
+
+# Condition 1: between 25 and 50 quantiles of sc and more than 75 occ. (were 100)
+cond1 <- my_we_raster1$SC >= sc_quantiles["25%"] & 
+  my_we_raster1$SC <= sc_quantiles["50%"] & 
+  my_we_raster1$n >= 75 # 100 ou inverter 25
+
+# Condition 2: between 50 and 75 quantiles of sc and more than 35 occ. (were 50)
+cond2 <- my_we_raster1$SC >= sc_quantiles["50%"] & 
+  my_we_raster1$SC <= sc_quantiles["75%"] & 
+  my_we_raster1$n >= 35 # 75 / 50
+
+# Condition 3: more than 75 quantiles of sc and more than 30 occ.
+cond3 <- my_we_raster1$SC >= sc_quantiles["75%"] & 
+  my_we_raster1$n >= 30 # 50 / 75
+
+# Tag rows that meet any condition
+# We are using 37% of cells to interpolate
+my_we_raster1$use_this <- cond1 | cond2 | cond3
+# Changing one name
+names(my_we_raster1)[which(names(my_we_raster1) == "our_efg")] <- "we"
+
+
+
+# Interpolating diversity metrics -----------------------------------------
+
+# Grid to predict the the metrics
+my_we_grid <- terra::rast(extent = terra::ext(my_we_raster),
+                          resolution = 0.25,
+                          crs = terra::crs(my_we_raster))
+my_we_grid <- terra::as.data.frame(my_we_grid, xy = TRUE, na.rm = FALSE)
+my_we_grid$lyr.1 <- NULL
+
+# Using only the minimum SC points
+my_we_pts_sp <- my_we_raster1[my_we_raster1$use_this %in% TRUE, ]
+sp::coordinates(my_we_pts_sp) <- ~x+y
+
+##### Interpolating weighted endemism #####
+
+# Make variogram
+v <- automap::autofitVariogram(log(we) ~ 1, my_we_pts_sp)
+vario <- v$var_model
+spp_corr_we <- vario$range[2]
+krig_mod <- gstat::gstat(id = "we",
+                         formula = log(we) ~ 1, # Interpolating log-transformed values
+                         locations = ~x+y,
+                         data = my_we_raster1[my_we_raster1$use_this %in% TRUE, ],
+                         model = gstat::vgm(model = "Ste", # find a better way to write this down
+                                            psill = vario[2, 2],
+                                            range = vario[2, 3],
+                                            kappa = vario[2, 4]),
+                         nmax = 30)
+
+
+
+# Setting the USSE method as the minimum sample coverage value in our data
+# my_we_grid$n <- (my_we_raster1$n[my_we_raster1$use_this %in% TRUE])
+# my_we_grid$SC <- min(my_we_raster1$SC[my_we_raster1$use_this %in% TRUE])
+
+# Predict the WE model in the grid
+my_we_grid$krig.we <- predict(krig_mod, my_we_grid)$we.pred
+
+
+##### Interpolating observed species richness #####
+
+# Make variogram
+v <- automap::autofitVariogram(log(S.obs) ~ 1, my_we_pts_sp)
+vario <- v$var_model
+spp_corr_sr <- vario$range[2]
+krig_mod <- gstat::gstat(id = "S.obs",
+                         formula = log(S.obs) ~ 1, # Interpolating log-transformed values
+                         locations = ~x+y,
+                         data = my_we_raster1[my_we_raster1$use_this %in% TRUE, ],
+                         model = gstat::vgm(model = "Ste", # find a better way to write this down
+                                            psill = vario[2, 2],
+                                            range = vario[2, 3],
+                                            kappa = vario[2, 4]),
+                         nmax = 30)
+
+# Predict the observed species richness model in the grid
+my_we_grid$krig.s.obs <- predict(krig_mod, my_we_grid)$S.obs.pred
+
+
+
+# Interpolating observed Simpson diversity --------------------------------
+
+# Make variogram
+v <- automap::autofitVariogram(log(Simp.obs) ~ 1, my_we_pts_sp)
+vario <- v$var_model
+spp_corr_simp <- vario$range[2]
+krig_mod <- gstat::gstat(id = "Simp.obs",
+                         formula = log(Simp.obs) ~ 1, # Interpolating log-transformed values
+                         locations = ~x+y,
+                         data = my_we_raster1[my_we_raster1$use_this %in% TRUE, ],
+                         model = gstat::vgm(model = "Ste", # find a better way to write this down
+                                            psill = vario[2, 2],
+                                            range = vario[2, 3],
+                                            kappa = vario[2, 4]),
+                         nmax = 30)
+
+# Predict the observed species richness model in the grid
+my_we_grid$krig.simp.obs <- predict(krig_mod, my_we_grid)$Simp.obs.pred
+
+# Convert to raster for cropping, masking, and plotting
+my_we_grid <- terra::rast(x = my_we_grid, crs = "epsg:4326")
+
+# Crop and mask
+my_int <- terra::crop(my_we_grid, tropical_america)
+my_int <- terra::mask(my_int, tropical_america)
+th_we <- terra::global(my_int$krig.we, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
+th_we_bin <- my_int$krig.we > th_we
+th_we_bin <- terra::as.polygons(th_we_bin, dissolve = TRUE)
+terra::plot(my_int$krig.we, main = "mine", col = hcl.colors(n = 100, "RdYlBu", rev = T))
+terra::plot(th_we_bin[th_we_bin$krig.we == 1, ], lwd = 3, add = T)
+
+
+# Save this result
+terra::writeRaster(my_int, here::here("data", "derived-data", 
+                                      "maps", "interpolated_maps25km.tiff"),
+                   overwrite = TRUE)
+
+
+
+# Some metrics and plots --------------------------------------------------
+
+##### GLS is the best estimator #####
+
+# Subsetting the data to run gls (~ 1,000 points randomly choosen)
+##### Maybe 2,000 points is ok...test later #####
+
+# This is needed to properly compare the metrics
+my_we_raster_true <- my_we_raster1[my_we_raster1$use_this %in% TRUE, ]
+sample_size <- round(0.5 * nrow(my_we_raster_true))
+sample_indices <- sample(1:nrow(my_we_raster_true), 
+                         size = sample_size)
+my_we_raster_true <- my_we_raster_true[sample_indices, ]
+
+# For weighted endemism
+tmp0 = lm(log(we) ~ 1, data = my_we_raster_true)
+tmp1  = MASS::rlm(log(we) ~ log(n), data = my_we_raster_true)
+tmp2 = lm(log(we) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC)
+tmp3 = lm(log(we) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC^3)
+tmp4 = nlme::gls(log(we) ~ log(n), data = my_we_raster_true, 
+                 corr = nlme::corExp(spp_corr_we, form= ~x+y, nugget = FALSE), 
+                 control = list(maxIter = 20, tolerance = 0.01))
+
+# Model selection using AICc
+mod_comparions <- performance::compare_performance(tmp0, tmp1, tmp2, tmp3, tmp4)
+(best_model <- mod_comparions$Model[which.min(mod_comparions$AIC)])
+
+# For observed richness
+tmp00 = lm(log(S.obs) ~ 1, data = my_we_raster_true)
+tmp11  = MASS::rlm(log(S.obs) ~ log(n), data = my_we_raster_true)
+tmp22 = lm(log(S.obs) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC)
+tmp33 = lm(log(S.obs) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC^3)
+tmp44 = nlme::gls(log(S.obs) ~ log(n), data = my_we_raster_true,
+                  corr = nlme::corExp(spp_corr_sr, form= ~x+y, nugget = FALSE),
+                  control = list(maxIter = 20, tolerance = 0.01))
+
+# Model selection using AICc
+mod_comparions <- performance::compare_performance(tmp00, tmp11, tmp22, tmp33, tmp44)
+(best_model <- mod_comparions$Model[which.min(mod_comparions$AIC)])
+
+
+# For observed Simpson
+tmp000 = lm(log(Simp.obs) ~ 1, data = my_we_raster_true)
+tmp111  = MASS::rlm(log(Simp.obs) ~ log(n), data = my_we_raster_true)
+tmp222 = lm(log(Simp.obs) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC)
+tmp333 = lm(log(Simp.obs) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC^3)
+tmp444 = nlme::gls(log(Simp.obs) ~ log(n), data = my_we_raster_true,
+                   corr = nlme::corExp(spp_corr_simp, form= ~x+y, nugget = FALSE),
+                   control = list(maxIter = 20, tolerance = 0.01))
+
+# Model selection using AICc
+mod_comparions <- performance::compare_performance(tmp000, tmp111, tmp222, tmp333, tmp444)
+(best_model <- mod_comparions$Model[which.min(mod_comparions$AIC)])
+
+
+svg("figures/FigureS2.svg", width = 5, height = 10)
+par(mfrow = c(3, 1))
+plot(we ~ n, 
+     log = "xy",
+     data = my_we_raster_true,
+     # pch = 19,
+     xlab = "Number of occurrences", 
+     ylab = "Weighted endemism")
+curve(exp(predict(tmp4, newdata = data.frame(n = x))), 
+      col = "red",
+      lwd = 2, 
+      add = TRUE)
+
+R2 <- cor(log(my_we_raster_true$we), predict(tmp4))^2
+df = tmp4$dims$N - tmp4$dims$p
+legend("topleft", legend = do.call(expression, list(
+  bquote(italic(F)~"- test="~.(round(anova(tmp4)$F[2], 1))),
+  bquote("d.f. = "~.(df)),
+  bquote({pseudo-italic(R)^2}~"="~.(round(R2*100, 1))~"%")
+)),
+bty = "n", horiz = F, cex = 1
+)
+
+plot(S.obs ~ n,
+     log = "xy",
+     data = my_we_raster_true,
+     # pch = 19,
+     xlab = "Number of occurrences", 
+     ylab = "Species richness")
+curve(exp(predict(tmp44, newdata = data.frame(n = x))), 
+      col = "red",
+      lwd = 2, 
+      add = TRUE)
+
+R2 <- cor(log(my_we_raster_true$S.obs), predict(tmp44))^2
+df = tmp44$dims$N - tmp4$dims$p
+legend("topleft", legend = do.call(expression, list(
+  bquote(italic(F)~"- test="~.(round(anova(tmp44)$F[2], 1))),
+  bquote("d.f. = "~.(df)),
+  bquote({pseudo-italic(R)^2}~"="~.(round(R2*100, 1))~"%")
+)),
+bty = "n", horiz = F, cex = 1
+)
+
+plot(Simp.obs ~ n,
+     log = "xy",
+     data = my_we_raster_true,
+     # pch = 19,
+     xlab = "Number of occurrences", 
+     ylab = "Simpson diversity")
+curve(exp(predict(tmp444, newdata = data.frame(n = x))), 
+      col = "red",
+      lwd = 2, 
+      add = TRUE)
+
+R2 <- cor(log(my_we_raster_true$Simp.obs), predict(tmp444))^2
+df = tmp444$dims$N - tmp4$dims$p
+legend("topleft", legend = do.call(expression, list(
+  bquote(italic(F)~"- test="~.(round(anova(tmp444)$F[2], 1))),
+  bquote("d.f. = "~.(df)),
+  bquote({pseudo-italic(R)^2}~"="~.(round(R2*100, 1))~"%")
+)),
+bty = "n", horiz = F, cex = 1
+)
+
+dev.off()

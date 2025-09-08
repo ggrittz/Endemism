@@ -29,20 +29,20 @@ gaz <- terra::vect(gaz, geom = c("longitude.gazetteer", "latitude.gazetteer"),
 # # Intersect against the Palearctic+Neotropical+Andean map
 # latamMap_nt <- terra::intersect(latamMap, nt_dis)
 # latamMap_nt$Morrone_re <- gsub("Neotropical_temperate", "Neotropical temperate",
-#                             latamMap_nt$Morrone_re)
+#                            latamMap_nt$Morrone_re)
 # # Do the same for gaz
 # gaz_nt <- terra::intersect(gaz, nt_dis)
 # gaz_nt$Morrone_re <- gsub("Neotropical_temperate", "Neotropical temperate",
-#                           gaz_nt$Morrone_re)
+#                          gaz_nt$Morrone_re)
 # 
 # # Intersect against the EFGs
 # latamMap_efg <- terra::intersect(latamMap, nt_efg)
 # latamMap_efg$Morrone_re <- gsub("Neotropical_temperate", "Neotropical temperate",
-#                              latamMap_efg$Morrone_re)
+#                             latamMap_efg$Morrone_re)
 # # Do the same for gaz
 # gaz_efg <- terra::intersect(gaz, nt_efg)
 # gaz_efg$Morrone_re <- gsub("Neotropical_temperate", "Neotropical temperate",
-#                            gaz_efg$Morrone_re)
+#                           gaz_efg$Morrone_re)
 # 
 # # Save these maps since it takes some time to run this intersection
 # file_path <- here::here("data", "derived-data", "maps")

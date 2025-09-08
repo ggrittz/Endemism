@@ -9,7 +9,8 @@ file_path3 <- here::here("outputs", "tables")
 file1 <- "end_per_efg.rds"
 file2 <- "spp_per_efg.rds"
 file3 <- "we_map_area_50km.tiff"
-file4 <- "interpolated_maps1km.tiff"
+# Substitute here later for 1 km map
+file4 <- "interpolated_maps25km.tiff"
 file5 <- "final_df.rds"
 file6 <- "missing_trees.rds"
 file7 <- "checklist_standardized.rds"
@@ -35,18 +36,62 @@ a <- our_names[grepl("herb", our_names$lifeForm_aggregated),]
 # Shapefiles...
 america <- terra::vect(here::here("data", "derived-data", "maps", "NTAmericas_efgs.shp"))
 tropical_america <- america[america$Morrone_re %in% "Neotropical", ]
-hotspots <- terra::vect(file.path("data", "raw-data", "maps", file10))
-hotspots <- terra::project(hotspots, tropical_america)
+tropical_america_diss <- terra::aggregate(tropical_america, cores = 8)
+# hotspots <- terra::vect(file.path("data", "raw-data", "maps", file10))
+# hotspots <- terra::project(hotspots, tropical_america)
+# 
+# hotspots <- hotspots[hotspots$NAME %in% c("Atlantic Forest",
+#                                           "Caribbean Islands",
+#                                           "Cerrado",
+#                                           "Chilean Winter Rainfall and Valdivian Forests",
+#                                           "Madrean Pine-Oak Woodlands",
+#                                           "Mesoamerica",
+#                                           "Tropical Andes",
+#                                           "Tumbes-Choco-Magdalena")]
+# hotspots <- hotspots[hotspots$Type %in% "hotspot area", ]
 
-hotspots <- hotspots[hotspots$NAME %in% c("Atlantic Forest",
-                                          "Caribbean Islands",
-                                          "Cerrado",
-                                          "Chilean Winter Rainfall and Valdivian Forests",
-                                          "Madrean Pine-Oak Woodlands",
-                                          "Mesoamerica",
-                                          "Tropical Andes",
-                                          "Tumbes-Choco-Magdalena")]
-hotspots <- hotspots[hotspots$Type %in% "hotspot area", ]
+# Preparing the study region map ------------------------------------------
+america_neo <- america[america$Morrone_re %in% "Neotropical", ]
+cores <- MetroBrewer::metro.brewer("Beijing", 
+                                   n = 19,
+                                   return_hex = T)
+
+names(cores) <- america_neo$our_efg
+america_neo$our_efg <- factor(america_neo$our_efg, levels = names(cores))
+
+svg("figures/StudyArea.svg", width = 10, height = 10)
+# Main plot of Neotropics
+terra::plot(america_neo, 
+            col = cores[america_neo$our_efg],
+            # main = "Neotropical Ecossystem Functional Groups",
+            xlab = "Longitude",
+            ylab = "Latitude",
+            cex.lab = 1.5,
+            pax = list(cex.axis = 1.4))
+
+# The rest of it
+terra::plot(america[!america$Morrone_re %in% "Neotropical", ],
+            add = TRUE)
+#xlab = "Longitude",
+#ylab = "Latitude",
+#cex.lab = 1.5,
+#pax = list(cex.axis = 1.4))
+
+# Scale
+terra::sbar(d = 1000, xy = "bottomright", type = "bar", div = 3,
+            lonlat = TRUE, below = "km")
+# Legend
+legend(x = -115,
+       y = -5,
+       legend = names(cores),
+       fill = cores,
+       y.intersp = 1,
+       x.intersp = 1,
+       cex = 1,
+       ncol = 1,
+       bty = "n")
+dev.off()
+
 
 # Calculate density map for observations ----------------------------------
 dens <- terra::rasterize(x = my_df1, y = wee_map, fun = "sum")
@@ -56,63 +101,108 @@ labels <- names(quantile_vals)
 
 # 90th percent quantile for more records per area
 # th_dens <- terra::global(log(dens), fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
-svg("figures/FigureS1.svg", width = 10, height = 10)
-terra::plot(tropical_america,
-            xlab = "Longitude",
-            ylab = "Latitude",
-            cex.lab = 1.5,
-            pax = list(cex.axis = 1.4))
+svg("figures/Figure1.svg", width = 10, height = 10)
+
+par(mfrow = c(2, 2))
 terra::plot(log(dens),
-            col = terrain.colors(length(breaks) - 1, rev = TRUE),
-            add = TRUE,
-            legend = F)
-terra::sbar(d = 1000, type = "bar", divs = 3, 
-            xy = "bottomright", lonlat = TRUE, below = "km")
-legend(x = -100,
-       y = -20,
-       labels = paste(seq(0, 100, 20)),
-       fill = breaks)
-
-dev.off()
-
-# Get 90th quantile for each case
-th_we <- terra::global(wee_map, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
-th_krig <- terra::global(int_map$krig.fit, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
-th_loess <- terra::global(int_map$loess.fit, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
-th_idw <- terra::global(int_map$idw.fit, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
-
-# Plotting
-
-# WE interpolated map
-svg("figures/Figure2,1.svg", width = 10, height = 10)
-terra::plot(int_map$krig.fit, 
-            xlab = "Longitude",
-            ylab = "Latitude",
+            main = "Sampling effort",
+            col = hcl.colors(n = 100, "RdYlBu", rev = T),
+            # add = TRUE,
+            cex.main = 1.75,
             cex.lab = 1.5,
             pax = list(cex.axis = 1.4),
-            col = terrain.colors(100, rev = TRUE), 
             legend = F)
-terra::plot(america[!america$Morrone_re %in% "Neotropical", ],
-            add = TRUE)
-terra::plot(hotspots,
-            # col = "purple",
-            # alpha = 0.25,
-            lwd = 2,
-            add = TRUE)
-terra::contour(int_map$krig.fit, add = TRUE, levels = th_krig, col = "red", lwd = 3,
-               drawlabels = FALSE)
-terra::sbar(d = 1000, type = "bar", divs = 3, xy = "bottomright", lonlat = TRUE, below = "km")
 
-diss <- terra::aggregate(america, cores = 8)
-terra::plot(diss)
-terra::plot(hotspots, col = "lightgray", add = TRUE)
-terra::contour(int_map$krig.fit, add = TRUE, levels = th_krig, col = "red", lwd = 3,
-               drawlabels = FALSE)
+terra::plot(tropical_america_diss,
+            # xlab = "Longitude",
+            # ylab = "Latitude",
+            # main = "Sampling effort (50 x 50 km)",
+            cex.lab = 1.5,
+            pax = list(cex.axis = 1.4),
+            add = TRUE)
+# terra::sbar(d = 1000, type = "bar", divs = 3, 
+#             xy = "bottomright", lonlat = TRUE, below = "km")
+# legend(x = -100,
+#        y = -20,
+#        labels = paste(seq(0, 100, 20)),
+#        fill = breaks)
+
+# Plotting
+# Get 90th quantile for each case
+th_we <- terra::global(int_map$krig.we, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
+# Do the same for obs richness and simpson
+th_s.obs <- terra::global(int_map$krig.s.obs, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
+th_simp.obs <- terra::global(int_map$krig.simp.obs, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
+
+# Get contours only for all maps
+th_we_bin <- int_map$krig.we > th_we
+th_we_bin <- terra::as.polygons(th_we_bin, dissolve = TRUE)
+th_s.obs_bin <- int_map$krig.s.obs > th_s.obs
+th_s.obs_bin <- terra::as.polygons(th_s.obs_bin, dissolve = TRUE)
+th_simp.obs_bin <- int_map$krig.simp.obs > th_simp.obs
+th_simp.obs_bin <- terra::as.polygons(th_simp.obs_bin, dissolve = TRUE)
+
+# Species richness
+terra::plot(int_map$krig.s.obs,
+            #
+            #
+            main = "Species richness",
+            cex.main = 1.75,
+            cex.lab = 1.5,
+            pax = list(cex.axis = 1.4),
+            col = hcl.colors(n = 100, "RdYlBu", rev = T),
+            legend = F)
+terra::plot(th_s.obs_bin[th_s.obs_bin$krig.s.obs == 1, ],
+            lwd = 3, add = T)
+
+
+# Simpson diversity
+terra::plot(int_map$krig.simp.obs,
+            #
+            #
+            main = "Simpson diversity",
+            cex.main = 1.75,
+            cex.lab = 1.5,
+            pax = list(cex.axis = 1.4),
+            col = hcl.colors(n = 100, "RdYlBu", rev = T),
+            legend = F)
+terra::plot(th_simp.obs_bin[th_simp.obs_bin$krig.simp.obs == 1, ],
+            lwd = 3, add = T)
+
+# WE
+terra::plot(int_map$krig.we, 
+            #xlab = "Longitude",
+            #ylab = "Latitude",
+            main = "Weighted endemism",
+            cex.main = 1.75,
+            cex.lab = 1.5,
+            pax = list(cex.axis = 1.4),
+            col = hcl.colors(n = 100, "RdYlBu", rev = T), 
+            legend = F)
+terra::plot(th_we_bin[th_we_bin$krig.we == 1, ],
+            lwd = 3, add = T)
 
 dev.off()
 
 
 
+# Top 90% WE values inside each biome (area) ------------------------------
+intersected <- terra::intersect(th_we_bin[th_we_bin$krig.we == 1, ], 
+                                tropical_america)
+# Area
+intersected$top90_area_m2 <- terra::expanse(intersected)
+intersected$top90_area_km2 <- intersected$top90_area_m2 / 1e6
+# Aggregate the results by our_efg
+result <- terra::aggregate(top90_area_km2 ~ our_efg, data = as.data.frame(intersected), FUN = sum)
+
+# Get the info into the summary_table
+scatt <- dplyr::left_join(scatt, result, by = c("EFG" = "our_efg"))
+scatt$prop_top90_area_km2 <- 100 * (scatt$top90_area_km2 / scatt$EFG_area_km)
+write.csv(scatt, file.path(file_path3, file9))
+
+
+
+##### POSSIBLY NOT USING ANYTHING BELOW HERE #####
 
 
 # Network map -------------------------------------------------------------

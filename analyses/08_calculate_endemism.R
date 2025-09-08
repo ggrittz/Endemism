@@ -2,7 +2,6 @@
 # Calculate endemism ------------------------------------------------------
 devtools::load_all()
 
-
 # Load data
 file_path <- here::here("data", "derived-data", "Endemic_species")
 family_names <- readRDS(here::here("data", "derived-data", "family_names.rds"))
@@ -33,9 +32,16 @@ for(i in family_names){
   }
 
   # Keeping all columns. They were filtered before anyway
-  all_fam[[i]] <- readRDS(family_path) # [, c("decimalLongitude.new", "decimalLatitude.new",
-                                       # "scientificName", "family", "our_efg", "is_nt", "efg_endemic",
-                                       # "loc.correct", "tax.check", "identifiedBy.new")]
+  all_fam[[i]] <- readRDS(family_path)  [, c("collectionCode.new", "recordedBy.new",
+                                             "identifiedBy.new", "recordNumber.new",
+                                             "year.new", "yearIdentified.new",
+                                             "country.new", "stateProvince.new",
+                                             "municipality.new", "locality.new",
+                                             "loc.correct1", "decimalLongitude.new", 
+                                             "decimalLatitude.new", "scientificName", 
+                                             "family", "our_efg", "is_nt", "efg_endemic",
+                                              "identifiedBy.new", "catalogNumber",
+                                             "geo.check1", "tax.check1")]
 }
 
 # Bind it all
@@ -108,9 +114,9 @@ result <- dplyr::left_join(result,
                            by = c("EFG" = "our_efg"))
 names(result)[which(names(result) == "er_Area_km")] <- "EFG_area_km"
 
-# if(!dir.exists(here::here("outputs", "tables")))
-#   dir.create(here::here("outputs", "tables"))
-# write.csv(result, here::here("outputs", "tables", "efg_summary_table.csv"))
+if(!dir.exists(here::here("outputs", "tables")))
+  dir.create(here::here("outputs", "tables"))
+write.csv(result, here::here("outputs", "tables", "efg_summary_table.csv"))
 
 # Generate species lists per EFG
 species_list <- lapply(split(expanded_df, expanded_df$our_efg), 
@@ -121,25 +127,56 @@ species_list_end <- lapply(split(expanded_df, expanded_df$efg_endemic),
                            function(x) unique(x$scientificName))
 
 # Save these
-# path_to_save <- here::here("data", "derived-data", "rds")
-# file1 <- "spp_per_efg.rds"
-# file2 <- "end_per_efg.rds"
-# saveRDS(species_list, file.path(path_to_save, file1))
-# saveRDS(species_list_end, file.path(path_to_save, file2))
+path_to_save <- here::here("data", "derived-data", "rds")
+file1 <- "spp_per_efg.rds"
+file2 <- "end_per_efg.rds"
+saveRDS(species_list, file.path(path_to_save, file1))
+saveRDS(species_list_end, file.path(path_to_save, file2))
 
 
 # What names are missing from our registers? (only good taxonomic sources here)
 ##### Or keep all sources anyway? #####
 all_trees <- our_names1$our_accepted_scientificName[
-  grepl("tree",our_names1$lifeForm_aggregated) & 
-    grepl("FBO|GTS|VPA|WCVP", our_names1$source)]
+  grepl("tree",our_names1$lifeForm_aggregated)]
 
 ##### To do this properly, we may need another filter...these are Americas' names, not #####
 ##### only tropical America... #####
 # These registers occur in the Americas but we didn't found a good taxonomist
 # to vouch for them
 missing_trees <- setdiff(all_trees, unique(all_fam1$scientificName))
-# saveRDS(missing_trees, file.path("data", "derived-data", "rds", "missing_trees.rds"))
+saveRDS(missing_trees, file.path("data", "derived-data", "rds", "missing_trees.rds"))
+
+# Saving the final df
+all_fam2 <- all_fam1[all_fam1$is_nt %in% TRUE, ] # 1,142,761 registers
+saveRDS(all_fam2, file.path("data", "derived-data", "rds", "final_df.rds"))
+
+
+# # Save all_fam2 df in the NDM/VNDM format for posterior analyses
+# 
+# ##### Prepare final df for endemicity analysis in VNDM #####
+# all_fam2 <- readRDS(file.path("data", "derived-data", "rds", "final_df.rds"))
+# 
+# # Append this map later in the end of the .xyd file
+# tropical_america <- terra::vect(file.path("data", "derived-data", "maps", "NTAmericas_dissolved.shp"))
+# tropical_america <- tropical_america[tropical_america$Morrone_re %in% "Neotropical", ]
+# tropical_america1 <- terra::simplifyGeom(tropical_america, tolerance = 0.25)
+# tropical_america2 <- terra::geom(tropical_america1, df = TRUE)
+# 
+# # Only necessary columns
+# for_ndm <- all_fam2[, c("scientificName", "decimalLongitude.new", "decimalLatitude.new")]
+# names(for_ndm) <- c("NAME1", "XCOOR", "YCOOR")
+# for_ndm$NAME1 <- gsub("\\[", "\\(", for_ndm$NAME1)
+# for_ndm$NAME1 <- gsub("\\]", "\\)", for_ndm$NAME1)
+# 
+# # Internal function
+# ndm_xyd(for_ndm)
+# 
+# # Append the map vertices to this same file
+# cat("map" , file = "./data/derived-data/NDM_DB.xyd", fill = TRUE, append = TRUE)
+# cat("line" , file = "./data/derived-data/NDM_DB.xyd", fill = TRUE, append = TRUE)
+# full <- do.call(paste, c(tropical_america2[, 4:3], sep = " ", collapse = "\n"))
+# cat(full, 
+#     file = "./data/derived-data/NDM_DB.xyd", fill = TRUE, append = TRUE)
 
 
 
@@ -148,58 +185,64 @@ missing_trees <- setdiff(all_trees, unique(all_fam1$scientificName))
 
 # Weighted Endemism -------------------------------------------------------
 
+efg <- terra::vect(here::here("data", "derived-data", "maps", "NTAmericas_efgs.shp"))
+efg <- efg[efg$Morrone_re %in% "Neotropical", ]
+final_df <- readRDS(here::here("data", "derived-data", "rds", "final_df.rds"))
+efg_end <- readRDS(here::here("data", "derived-data", "rds", "end_per_efg.rds"))
+
+# Do not calculate WEE on transitionals
+efg_end <- efg_end[!grepl("Transition|predominant", names(efg_end))]
+
+# only 15 remanining: three have no endemics and one have no records
+efg_names <- names(efg_end)
+
+# svg("figures/FigureSX.3.svg", width = 10, height = 10)
+# par(mfrow = c(3, 2))
+# for(i in seq_along(efg_names[11:15])){
+#   terra::plot(efg[efg$our_efg %in% efg_names[i], ], main = efg_names[i])
+# }
+# dev.off()
+
 # Grid cell resolution to be used
 base_res <- 0.5 # 111.32 km = 1 grid degree at Equator
 
-# Create template raster
+# Create template raster for calculating WEE in ALL tropical America
 r_template <- terra::rast(extent = terra::ext(efg),
                           resolution = base_res,
                           crs = "epsg:4326")
-
 # Rasterize the Tropical America map into the template
 raster_output <- terra::rasterize(efg, r_template, field = "our_efg")
-# Save this product for later
-# terra::writeRaster(raster_output, 
-#                    file.path(here::here("data",
-#                                         "derived-data",
-#                                         "maps",
-#                                         "nt_100km.tiff")),
-#                    overwrite = TRUE)
-
 # Convert to {raster} since the Guerin 2015 function was made on it
 # Check for our own updates if time makes it possible #
 raster_raster <- raster::raster(raster_output)
 
-# Simple test
-# all_fam2 <- all_fam1[1:500000, ]
-all_fam2 <- all_fam1[all_fam1$is_nt %in% TRUE, ] # 1,142,761 registers
-# saveRDS(all_fam2, file.path("data", "derived-data", "rds", "final_df.rds"))
+
+# Do the same but now for each biome separately
+rasterized_biomes <- list()
+
+for(i in seq_along(efg_names)){
+  # Subset the SpatVector for the current biome
+  efg_subset <- efg[efg$our_efg == efg_names[i], ]
+  
+  # Create template for this biome
+  biome_template <- terra::rast(extent = terra::ext(r_template),
+                                resolution = base_res,
+                                crs = "epsg:4326")
+  
+  # Rasterize this specific biome
+  rasterized_biomes[[i]] <- terra::rasterize(efg_subset, biome_template, field = "our_efg")
+}
+
+# Name the list elements for easier reference
+names(rasterized_biomes) <- efg_names
+# They need to be {raster} format
+rasterized_biomes <- lapply(rasterized_biomes, raster::raster)
 
 
-# Save all_fam2 df in the NDM/VNDM format for posterior analyses
+# Mapping weighted endemism using 'area' (EOO convex hull per se) ---------
 
-##### Prepare final df for endemicity analysis in VNDM #####
-a <- final_df[, c("scientificName", "decimalLatitude.new", "decimalLongitude.new")]
-b <- a[grepl("Ocotea porosa|Araucaria", a$Species), ]
-names(a) <- c("Species", "Latitude", "Longitude")
-path_to_save <- here::here("data", "derived-data", "occ_forNVDM.csv")
-path_to_save1 <- here::here("data", "derived-data", "teste.csv")
-
-readr::write_delim(b, path_to_save1, delim = ";")
-
-
-
-
-
-
-
-
-
-
-
-
-# Mapping weighted endemism using 'area' (EOO convex hull per se)
-we_map_area = weighted.endemism(species_records = all_fam2,
+##### All tropical America #####
+we_map_area = weighted.endemism(species_records = final_df,
                                 species = "scientificName",
                                 latitude = "decimalLatitude.new",
                                 longitude = "decimalLongitude.new",
@@ -209,349 +252,39 @@ we_map_area = weighted.endemism(species_records = all_fam2,
                                 geo.type = "cell",
                                 geo.calc = "polygon",
                                 plot.raster = FALSE)
-# Endemism null test
-we_map_area_null <- endemism.null.test(we_map_area,
-                                       nrep = 100,
-                                       outlier.range = 1.5)
 
-# Store both outputs for later use, if needed
-# path_to_save <- here::here("data", "derived-data", "rds")
-# name_to_save0 <- "we_map_area_50km_null.rds"
-# name_to_save1 <- "we_map_area_50km.tiff"
-# # if(!dir.exists(path_to_save))
-#   dir.create(path_to_save)
-#
-# terra::writeRaster(we_map_area$WE_raster, file.path(path_to_save, name_to_save1))
-# saveRDS(we_map_area_null, file.path(path_to_save, name_to_save0))
+# Saving
+saveRDS(we_map_area, here::here("data", "derived-data", "rds", "we_map_area_50km.rds"))
 
+##### All biomes now, but separately #####
+# To save
+we_map_area_biomes <- list()
 
-# Load only necessary objects for analyses --------------------------------
-
-# we_map_span <- readRDS(here::here("data", "derived-data", "rds",
-#                                  "we_map_span.rds"))
-
-final_df <- readRDS(here::here("data", "derived-data", "rds",
-                               "final_df.rds"))
-we_map_area <- readRDS(here::here("data", "derived-data", "rds",
-                                 "we_map_area_50km.rds"))
-we_map_area_null <- readRDS(here::here("data", "derived-data", "rds",
-                                       "we_map_area_50km_null_model.rds"))
-# Study area
-tropical_america <- here::here("data", "derived-data", "maps", "NTAmericas_dissolved.shp")
-tropical_america <- terra::vect(tropical_america, crs = "epsg:4326")
-tropical_america <- tropical_america[tropical_america$Morrone_re %in% "Neotropical", ]
-
-
-# Dealing with sampling coverage ------------------------------------------
-# Convert the {raster} map to {terra}
-my_we_raster <- terra::rast(we_map_area$WE_raster, crs = "epsg:4326")
-terra::values(my_we_raster) <- raster::values(we_map_area$WE_raster)
-# Convert occ points to spatial points
-final_df1 <- terra::vect(final_df, 
-                         geom = c("decimalLongitude.new",
-                                  "decimalLatitude.new"), 
-                         crs = "epsg:4326")
-
-# Get cell numbers for all points
-cell_numbers <- terra::cellFromXY(my_we_raster, terra::crds(final_df1))
-
-# Create a list split by cell numbers
-cell_species <- split(final_df1$scientificName, cell_numbers)
-
-# Count abundances per species per cell
-abundance_list <- lapply(cell_species, function(x) {
-  table(x)
-  })
-abundance_list <- abundance_list[!is.na(names(abundance_list))]
-
-# Only the vector of values
-abundance_vectors <- lapply(abundance_list, as.vector)
-
-# Measure the sampling coverage (considering N/cell as abundance data type)
-sc_df = iNEXT::DataInfo(abundance_vectors, datatype = "abundance")
-
-# Asymptotic estimates for diversity metrics
-library(parallel)
-library(doParallel)
-
-cl <- makeCluster(detectCores()-4)
-clusterEvalQ(cl, library("iNEXT"))
-clusterExport(cl, list("abundance_vectors"), envir = environment())
-
-tmp = parLapply(cl, 1:length(abundance_vectors), fun = function(x) {
-  current_abundance <- abundance_vectors[[x]]
-  cell_name <- names(abundance_vectors)[x]
+for(i in seq_along(efg_names)){
   
-  tmp1 = iNEXT(current_abundance, datatype = "abundance", q = 0, 
-               size = 100, endpoint = 100, knots = 2, se = FALSE)$AsyEst
+  # Subset each group of single-biome endemics
+  data_to_use <- final_df[final_df$scientificName %in% efg_end[[i]], ]
   
-  tmp1 <- data.frame(cell_id = cell_name,
-                     Diversity = rownames(tmp1),
-                     tmp1[, 1:3],
-                     row.names = NULL)
+  we_map_area = weighted.endemism(species_records = data_to_use,
+                                  species = "scientificName",
+                                  latitude = "decimalLatitude.new",
+                                  longitude = "decimalLongitude.new",
+                                  frame.raster = rasterized_biomes[[i]],
+                                  outlier_pct = 99,
+                                  weight.type = "geo",
+                                  geo.type = "cell",
+                                  geo.calc = "polygon",
+                                  plot.raster = FALSE)
   
-  return(tmp1)
+  we_map_area_biomes[[i]] <- we_map_area
   
-})
+}
+names(we_map_area_biomes) <- efg_names
 
-stopCluster(cl)
+# Saving
+saveRDS(we_map_area_biomes, here::here("data", "derived-data", "rds", "we_map_area_biomes_50km.rds"))
 
-# Convert results to data frame
-diversity_df = do.call("rbind.data.frame", tmp)
-diversity_df <- diversity_df[grepl("Richness", diversity_df$Diversity), ]
-diversity_df$cell_id <- as.numeric(diversity_df$cell_id)
-names(diversity_df)[which(names(diversity_df) == "Estimator")] <- "S.est"
-
-##### Get this information back to the raster #####
-cell_id <- as.numeric(names(abundance_vectors))
-sc_df <- data.frame(cell_id = as.numeric(sc_df$Assemblage),
-                    n = sc_df$n,
-                    S.obs = sc_df$S.obs,
-                    SC = sc_df$SC)
-
-# Get coordinates for these specific cells
-cell_coords <- data.frame(cell_id = cell_id,
-                          x = terra::xFromCell(my_we_raster, cell_id),
-                          y = terra::yFromCell(my_we_raster, cell_id))
-# Now the metrics
-cell_metrics <- dplyr::left_join(sc_df,
-                                 cell_coords,
-                                 by = "cell_id")
-cell_metrics <- dplyr::left_join(cell_metrics, diversity_df[, c(1, 4)],
-                                 by = "cell_id")
-
-# Populate new layers
-my_we_raster <- c(my_we_raster,
-                  terra::rast(my_we_raster, nlyrs = 4))
-names(my_we_raster)[(terra::nlyr(my_we_raster)-3):terra::nlyr(my_we_raster)] <- 
-  c("sample_coverage", "n", "S.obs", "S.est")
-
-my_we_raster[["sample_coverage"]][cell_metrics$cell_id] <- cell_metrics$SC
-my_we_raster[["n"]][cell_metrics$cell_id] <- cell_metrics$n
-my_we_raster[["S.obs"]][cell_metrics$cell_id] <- cell_metrics$S.obs
-my_we_raster[["S.est"]][cell_metrics$cell_id] <- cell_metrics$S.est
-
-# Which cells are going to be used for interpolation?
-my_we_raster1 <- terra::as.data.frame(my_we_raster, xy = TRUE, cells = TRUE)
-
-##### Using sample coverage and N cut-offs following Lima et al. 2020 #####
-
-# Get the quantiles for SC
-sc_quantiles <- quantile(my_we_raster1$sample_coverage, probs = c(0.25, 0.50, 0.75))
-
-# Condition 1: between 25 and 50 quantiles of sc and more than 100 occ.
-cond1 <- my_we_raster1$sample_coverage >= sc_quantiles["25%"] & 
-  my_we_raster1$sample_coverage <= sc_quantiles["50%"] & 
-  my_we_raster1$n >= 75
-
-# Condition 2: between 50 and 75 quantiles of sc and more than 50 occ.
-cond2 <- my_we_raster1$sample_coverage >= sc_quantiles["50%"] & 
-  my_we_raster1$sample_coverage <= sc_quantiles["75%"] & 
-  my_we_raster1$n >= 35
-
-# Condition 3: more than 75 quantiles of sc and more than 30 occ.
-cond3 <- my_we_raster1$sample_coverage >= sc_quantiles["75%"] & 
-  my_we_raster1$n >= 30
-
-# Tag rows that meet any condition
-my_we_raster1$use_this <- cond1 | cond2 | cond3
-# Changing one name
-names(my_we_raster1)[which(names(my_we_raster1) == "our_efg")] <- "we"
-
-
-
-# Interpolating diversity metrics -----------------------------------------
-
-# Grid to predict the the metrics
-my_we_grid <- terra::rast(extent = terra::ext(my_we_raster),
-                          resolution = 0.25,
-                          crs = terra::crs(my_we_raster))
-my_we_grid <- terra::as.data.frame(my_we_grid, xy = TRUE, na.rm = FALSE)
-my_we_grid$lyr.1 <- NULL
-
-# Using only the minimum SC points
-my_we_pts_sp <- my_we_raster1[my_we_raster1$use_this %in% TRUE, ]
-sp::coordinates(my_we_pts_sp) <- ~x+y
-
-##### Interpolating weighted endemism #####
-
-# Make variogram
-v <- automap::autofitVariogram(log(we) ~ 1, my_we_pts_sp)
-vario <- v$var_model
-spp_corr_we <- vario$range[2]
-krig_mod <- gstat::gstat(id = "we",
-                         formula = log(we) ~ 1, # Interpolating log-transformed values
-                         locations = ~x+y,
-                         data = my_we_raster1[my_we_raster1$use_this %in% TRUE, ],
-                         model = gstat::vgm(model = "Ste", # find a better way to write this down
-                                            psill = vario[2, 2],
-                                            range = vario[2, 3],
-                                            kappa = vario[2, 4]),
-                         nmax = 30)
-
-
-
-# Setting the USSE method as the minimum sample coverage value in our data
-# my_we_grid$n <- (my_we_raster1$n[my_we_raster1$use_this %in% TRUE])
-# my_we_grid$SC <- min(my_we_raster1$SC[my_we_raster1$use_this %in% TRUE])
-
-# Predict the WE model in the grid
-my_we_grid$krig.we <- predict(krig_mod, my_we_grid)$we.pred
-
-
-##### Interpolating observed species richness #####
-
-# Make variogram
-v <- automap::autofitVariogram(log(S.obs) ~ 1, my_we_pts_sp)
-vario <- v$var_model
-spp_corr_sr <- vario$range[2]
-krig_mod <- gstat::gstat(id = "S.obs",
-                         formula = log(S.obs) ~ 1, # Interpolating log-transformed values
-                         locations = ~x+y,
-                         data = my_we_raster1[my_we_raster1$use_this %in% TRUE, ],
-                         model = gstat::vgm(model = "Ste", # find a better way to write this down
-                                            psill = vario[2, 2],
-                                            range = vario[2, 3],
-                                            kappa = vario[2, 4]),
-                         nmax = 30)
-
-# Predict the observed species richness model in the grid
-my_we_grid$krig.s.obs <- predict(krig_mod, my_we_grid)$S.obs.pred
-
-
-##### Interpolating asymptotic species richness q = 0 #####
-
-# Make variogram
-v <- automap::autofitVariogram(log(S.est) ~ 1, my_we_pts_sp)
-vario <- v$var_model
-spp_corr_sre <- vario$range[2]
-krig_mod <- gstat::gstat(id = "S.est",
-                         formula = log(S.est) ~ 1, # Interpolating log-transformed values
-                         locations = ~x+y,
-                         data = my_we_raster1[my_we_raster1$use_this %in% TRUE, ],
-                         model = gstat::vgm(model = "Ste", # find a better way to write this down
-                                            psill = vario[2, 2],
-                                            range = vario[2, 3],
-                                            kappa = vario[2, 4]),
-                         nmax = 30)
-
-# Predict the observed species richness model in the grid
-my_we_grid$krig.s.est <- predict(krig_mod, my_we_grid)$S.est.pred
-
-
-# Convert to raster for cropping, masking, and plotting
-my_we_grid <- terra::rast(x = my_we_grid, crs = "epsg:4326")
-
-# Crop and mask
-my_int <- terra::crop(my_we_grid, tropical_america)
-my_int <- terra::mask(my_int, tropical_america)
-# terra::plot(my_int$krig.fit, col = terrain.colors(100, rev = TRUE))
-
-th_krig_we <- terra::global(my_int$krig.s.obs, fun = quantile, probs = 0.9, na.rm = TRUE)[1,1]
-terra::plot(my_int$krig.we, 
-            #xlab = "Longitude",
-            #ylab = "Latitude",
-            main = "Weighted endemism",
-            cex.lab = 1.5,
-            pax = list(cex.axis = 1.4),
-            col = terrain.colors(100, rev = TRUE), 
-            legend = F)
-terra::contour(my_int$krig.we, add = TRUE, levels = th_krig_we, col = "black", lwd = 3,
-               drawlabels = FALSE)
-terra::plot(my_int$krig.s.obs > th_krig_we, main = "Estimated richness", legend = F)
-
-
-# Save this result
-terra::writeRaster(my_int, here::here("data", "derived-data", 
-                                      "maps", "interpolated_maps25km.tiff"),
-                   overwrite = TRUE)
-
-
-
-# Some metrics and plots --------------------------------------------------
-
-##### GLS is the best estimator #####
-
-# Subsetting the data to run gls (~ 1,000 points randomly choosen)
-##### Maybe 2,000 points is ok...test later #####
-
-# This is needed to properly compare the metrics
-my_we_raster_true <- my_we_raster1[my_we_raster1$use_this %in% TRUE, ]
-sample_size <- round(0.5 * nrow(my_we_raster_true))
-sample_indices <- sample(1:nrow(my_we_raster_true), 
-                         size = sample_size)
-my_we_raster_true <- my_we_raster_true[sample_indices, ]
-
-# For weighted endemism
-tmp0 = lm(log(we) ~ 1, data = my_we_raster_true)
-tmp1  = MASS::rlm(log(we) ~ log(n), data = my_we_raster_true)
-tmp2 = lm(log(we) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$sample_coverage)
-tmp3 = lm(log(we) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$sample_coverage^3)
-tmp4 = nlme::gls(log(we) ~ log(n), data = my_we_raster_true, 
-                 corr = nlme::corExp(spp_corr_we, form= ~x+y, nugget = FALSE), 
-                 control = list(maxIter = 20, tolerance = 0.01))
-
-# For observed richness
-tmp00 = lm(log(S.obs) ~ 1, data = my_we_raster_true)
-tmp11  = MASS::rlm(log(S.obs) ~ log(n), data = my_we_raster_true)
-tmp22 = lm(log(S.obs) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$sample_coverage)
-tmp33 = lm(log(S.obs) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$sample_coverage^3)
-tmp44 = nlme::gls(log(S.obs) ~ log(n), data = my_we_raster_true,
-                  corr = nlme::corExp(spp_corr_we, form= ~x+y, nugget = FALSE),
-                  control = list(maxIter = 20, tolerance = 0.01))
-
-# Model selection using AICc
-mod_comparions <- performance::compare_performance(tmp00, tmp11, tmp22, tmp33, tmp44)
-(best_model <- mod_comparions$Model[which.min(mod_comparions$AIC)])
-
-
-jpeg(filename = "FigureS3.jpg", width = 3100*1.5, height = 3000*1.5, units = "px", 
-     pointsize = 12, res = 600, family = "sans", type="cairo", bg="white")
-par(mfrow = c(2,2)) #, las=1,mar=c(3,3,0.5,0.25),mgp=c(1.8,0.35,0),tcl=-.25)
-plot(log(we) ~ log(n), 
-     data = my_we_raster_true,
-     # pch = 19,
-     xlab = "Number of occurrences", 
-     ylab = "Weighted endemism")
-curve(predict(tmp4, newdata = data.frame(n = exp(x))), 
-      col = "red",
-      lwd = 2, 
-      add = TRUE)
-
-R2 <- cor(log(my_we_raster_true$we),predict(tmp4))^2
-df = tmp4$dims$N - tmp4$dims$p
-legend("bottomright", legend = do.call(expression, list(
-  bquote(italic(F)~"- test="~.(round(anova(tmp4)$F[2], 1))),
-  bquote("d.f. = "~.(df)),
-  bquote({pseudo-italic(R)^2}~"="~.(round(R2*100,1))~"%")
-)),
-bty = "n", horiz = F, cex = 1, adj = c(0, 0), inset = c(-0.01,-0.03)
-)
-
-plot(log(S.obs) ~ log(n), 
-     data = my_we_raster_true,
-     # pch = 19,
-     xlab = "Number of occurrences", 
-     ylab = "Weighted endemism")
-curve(predict(tmp44, newdata = data.frame(n = exp(x))), 
-      col = "red",
-      lwd = 2, 
-      add = TRUE)
-
-R2 <- cor(log(my_we_raster_true$S.obs),predict(tmp44))^2
-df = tmp44$dims$N - tmp4$dims$p
-legend("bottomright", legend = do.call(expression, list(
-  bquote(italic(F)~"- test="~.(round(anova(tmp44)$F[2], 1))),
-  bquote("d.f. = "~.(df)),
-  bquote({pseudo-italic(R)^2}~"="~.(round(R2*100,1))~"%")
-)),
-bty = "n", horiz = F, cex = 1, adj = c(0, 0), inset = c(-0.01,-0.03)
-)
-
-
-
-
-
+# rm(list=ls())
 
 
 

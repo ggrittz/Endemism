@@ -163,57 +163,10 @@ efg_map_all <- rbind(efg_map_neo, efg_map_pal, efg_map_tmp)
 efg_map_all$er_Area_ha <- terra::expanse(efg_map_all, unit = "ha")
 efg_map_all$er_Area_km2 <- efg_map_all$er_Area_ha * 0.01
 
-rm(list=ls())
-
-
-
-# Preparing the study region map ------------------------------------------
-efg_map_all <- terra::vect(here::here("data", "derived-data",
-                                      "maps", "NTAmericas_efgs.shp"))
-efg_map_neo <- efg_map_all[efg_map_all$Morrone_re %in% "Neotropical", ]
-cores <- MetroBrewer::metro.brewer("Beijing", 
-                                   n = 19)
-# # Testing if everything is ok
-# cores <- c("#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD",
-#            "#8C564B", "#E377C2", "#7F7F7F", "#BCBD22", "#17BECF",
-#            "#AEC7E8", "#FFBB78", "#98DF8A", "#FF9896", "#C5B0D5",
-#            "#C49C94", "#F7B6D2", "#C7C7C7", "#DBDB8D") #, "#9EDAE5",
-#            #"#393B79", "#637939", "#8C6D31", "#843C39", "#7B4173")
-names(cores) <- efg_map_neo$our_efg
-efg_map_neo$our_efg <- factor(efg_map_neo$our_efg, levels = names(cores))
-
-svg("figures/StudyArea.svg", width = 10, height = 10)
-# Main plot of Neotropics
-terra::plot(efg_map_neo, 
-           col = cores[efg_map_neo$our_efg],
-           # main = "Neotropical Ecossystem Functional Groups",
-           xlab = "Longitude",
-           ylab = "Latitude",
-           cex.lab = 1.5,
-           pax = list(cex.axis = 1.4))
-
-# The rest of it
-terra::plot(efg_map_all[!efg_map_all$Morrone_re %in% "Neotropical", ],
-            add = TRUE)
-            #xlab = "Longitude",
-            #ylab = "Latitude",
-            #cex.lab = 1.5,
-            #pax = list(cex.axis = 1.4))
-
-# Scale
-terra::sbar(d = 1000, xy = "bottomright", type = "bar", div = 3,
-            lonlat = TRUE, below = "km")
-# Legend
-legend(x = -115,
-       y = -5,
-       legend = names(cores),
-       fill = cores,
-       y.intersp = 1,
-       x.intersp = 1,
-       cex = 1,
-       ncol = 1,
-       bty = "n")
-dev.off()
+# Ignore this step: we are keeping it anyways
+# Remove the oceanic cool temperate biomes since there are no occurrence records on it
+# efg_map_all <- efg_map_all[!grepl("Oceanic cool temperate rainforests", 
+#                                   efg_map_all$our_efg), ]
 
 # Save the efg map
 file_name <- "NTAmericas_efgs.shp"
