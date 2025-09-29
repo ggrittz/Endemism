@@ -6,9 +6,21 @@ devtools::load_all()
 file_path <- here::here("data", "derived-data", "Cleaned_occs")
 folders <- list.files(file_path, full.names = TRUE)
 
-# Load gazetteer
-gaz <- file.path("D:", "plantR", "data-raw", "raw_dictionaries", "gazetteer.csv")
-gaz <- read.csv(gaz)
+# Load gazetteer from Drive
+options(gargle_oauth_cache = ".secrets")
+# googlesheets4::gs4_auth() # is this needed?
+googlesheets4::gs4_auth(cache = ".secrets",
+                        email = "ggrittz@usp.br",
+                        scopes = "https://www.googleapis.com/auth/spreadsheets.readonly")
+# Download from Google Drive
+link <- "https://docs.google.com/spreadsheets/d/"
+link1 <- "1qOyD7qDzgqEz6Xdbf5GcrjDChjJbJApfWk_P4pgCOAg/edit?gid=1266085842#gid=1266085842"
+gaz <- as.data.frame(googlesheets4::read_sheet(paste0(link, link1)))
+# Load families
+# family_names <- readRDS(here::here("data", "derived-data", "family_names.rds"))
+
+# Only ok here? Last time I used everything (22/09)
+# gaz <- gaz[gaz$status %in% "ok", ]
 # gaz_plantR1 <- plantR:::gazetteer
 
 
@@ -35,11 +47,12 @@ for (i in family_names) {
                df$geo.check1 %in% "check_gazetteer", ]
     
     # Select only the specified columns
-    df <- df[, c("country.new", "stateProvince.new", "municipality.new",
-                 "locality.new", "loc", "locality", "loc.correct",
+    df <- df[, c("country", "stateProvince", "municipality", "locality",
+                 "country.new", "stateProvince.new", "municipality.new",
+                 "locality.new", "loc", "loc.correct",
                  "loc.check", "geo.check",
                  "decimalLatitude.new", "decimalLongitude.new",
-                 "resolution.gazetteer", "geo.reg")]
+                 "resolution.gazetteer", "geo.reg", "basisOfRecord", "data_source")]
     
     # Add the filtered and selected dataframe to the list
     loc_list[[i]] <- df
@@ -57,20 +70,22 @@ loc_list$family <- gsub("\\..*", "", loc_list$family)
 loc_list$loc <- gsub("___", "", loc_list$loc)
 loc_list$loc <- gsub("__", "_", loc_list$loc)
 loc_list$loc <- gsub("_$", "", loc_list$loc)
-rm(list=ls())
+# rm(list=ls())
 
-
+# saveRDS(loc_list, here::here("data", "derived-data", "loc_list_new_fixLoc.rds"))
 
 # Post-preparing ----------------------------------------------------------
-file_path2 <- here::here("data", "derived-data")
-file_name2 <- "localities_new.parquet"
-# arrow::write_parquet(loc_list, sink = file.path(file_path2, file_name2))
-loc_list <- as.data.frame(arrow::read_parquet(file.path(file_path2, file_name2)))
-to_remove <- c("family", "geo.reg", "resolution.gazetteer", "geo.check")
+# file_path2 <- here::here("data", "derived-data")
+# file_name2 <- "loc_list_new_fixLoc.rds"
+# loc_list <- readRDS(file.path(file_path2, file_name2))
+to_remove <- c("family", "geo.reg", "loc.check", "geo.check", "resolution.gazetteer",
+               "basisOfRecord", "data_source", "country.new", "stateProvince.new",
+               "municipality.new", "locality.new", "decimalLatitude.new", "decimalLongitude.new")
 loc_list <- loc_list[, -which(names(loc_list) %in% to_remove)]
-loc_list <- loc_list[, c(1, 2, 3, 6, 5, 4, 7:length(loc_list))]
+# loc_list$decimalLatitude.new <- as.numeric(loc_list$decimalLatitude.new)
+# loc_list$decimalLongitude.new <- as.numeric(loc_list$decimalLongitude.new)
+# loc_list$recID <- NULL
 
-# Count each locality.new
 loc_new_table <- data.frame(table(loc_list$loc))
 loc_new_table <- loc_new_table[loc_new_table$Freq >= 100, ]
 
@@ -83,56 +98,60 @@ loc_new_table <- loc_new_table[!tolower(loc_new_table$Var1) %in% tolower(gaz$NAM
 # loc_new_table$Var1 <- gsub("[0-9]", "", loc_new_table$Var1)
 # loc_new_table <- loc_new_table[!loc_new_table$Var1 %in% "", ]
 
-loc_new_table$resolution.gazetteer <- NA
-loc_new_table$latitude.gazetteer <- NA
-loc_new_table$longitude.gazetteer <- NA
+# Filter these on loc_list
+loc_list <- loc_list[loc_list$loc %in% loc_new_table$Var1, ]
+loc_list <- loc_list[!duplicated(loc_list$loc), ]
+loc_list <- dplyr::left_join(loc_list, loc_new_table,
+                             by = c("loc" = "Var1"))
 
-# Get missing country
-get_these <- grepl("^[^_]*$", loc_new_table$Var1)
-loc_new_table$resolution.gazetteer[get_these] <- "country"
-# Get missing states
-get_these <- grepl("^[^_]*_[^_]*$", loc_new_table$Var1)
-loc_new_table$resolution.gazetteer[get_these] <- "state"  
-# Get missing county
-get_these <- grepl("^[^_]*_[^_]*_[^_]*$", loc_new_table$Var1)
-loc_new_table$resolution.gazetteer[get_these] <- "county"
+loc_list$resolution.gazetteer <- NA
+loc_list$resolution.gazetteer <- as.character(loc_list$resolution.gazetteer)
+loc_list$latitude.gazetteer <- NA
+loc_list$latitude.gazetteer <- as.character(loc_list$latitude.gazetteer)
+loc_list$longitude.gazetteer <- NA
+loc_list$longitude.gazetteer <- as.character(loc_list$longitude.gazetteer)
 
+# Populate new fixLoc probable (or not) issues
+gaz$new_fixLoc <- NA
+gaz[gaz == "NA"] <- NA
+gbif_gsg_indices <- which(gaz$source %in% "gbif_gsg")
 
-# Which one of these are not in the gazetteer?
-missing_gaz <- setdiff(loc_new_table$Var, gaz$loc)
+# Which of these gbif_gsg locations still exist?
+still_exist_mask <- gaz$loc[gbif_gsg_indices] %in% loc_list$loc
+gaz$new_fixLoc[gbif_gsg_indices[still_exist_mask]] <- "still_exists"
+solved_mask <- !still_exist_mask  # The ones that don't exist anymore
+gaz$new_fixLoc[gbif_gsg_indices[solved_mask]] <- "solved"
+
+# Which one of these are new issues?
+new_fixLoc_issues <- setdiff(loc_list$loc, gaz$loc)
 # Subset these
-loc_new_table <- loc_new_table[loc_new_table$Var1 %in% missing_gaz, ]
-# Can't solve / cases
-loc_new_table <- loc_new_table[!grepl("/", loc_new_table$Var1), ]
+loc_list <- loc_list[loc_list$loc %in% new_fixLoc_issues, ]
+# Can't solve cases with / separating unknown adm levels unfortunately
+slash_cases <- which(grepl("/", loc_list$loc))
+loc_list <- loc_list[!grepl("/", loc_list$loc), ]
+
 # Make NAME_0-4 columns
-loc_new_table$Var1 <- as.character(loc_new_table$Var1)
-splitted <- strsplit(loc_new_table$Var1, split = "_")
-loc_new_table$NAME_0 <- sapply(splitted, function(x) x[1])
-loc_new_table$NAME_1 <- sapply(splitted, function(x) x[2])
-loc_new_table$NAME_2 <- sapply(splitted, function(x) x[3])
-loc_new_table$NAME_3 <- sapply(splitted, function(x) x[4])
-loc_new_table$NAME_4 <- sapply(splitted, function(x) x[5])
-
-# Remove duplicated bad cases such as argentina_argentina
-loc_new_table <- loc_new_table[!( !is.na(loc_new_table$NAME_0) & 
-                                    !is.na(loc_new_table$NAME_1) & 
-                                    loc_new_table$NAME_0 == loc_new_table$NAME_1 ), ]
-
+loc_list$loc <- as.character(loc_list$loc)
+splitted <- strsplit(loc_list$loc, split = "_")
+loc_list$NAME_0 <- sapply(splitted, function(x) x[1])
+loc_list$NAME_1 <- sapply(splitted, function(x) x[2])
+loc_list$NAME_2 <- sapply(splitted, function(x) x[3])
+loc_list$NAME_3 <- sapply(splitted, function(x) x[4])
+loc_list$NAME_4 <- sapply(splitted, function(x) x[5])
 
 # Adding and editing some columns before saving
-loc_new_table$source <- "gbif_gsg"
-loc_new_table$order <- max(gaz$order)+1 : dim(loc_new_table)[1]
-names(loc_new_table)[names(loc_new_table) == "Freq"] <- "status"
-names(loc_new_table)[names(loc_new_table) == "Var1"] <- "loc"
-loc_new_table$status <- as.character(loc_new_table$status)
+loc_list$source <- "gbif_gsg_new"
+loc_list$order <- max(gaz$order, na.rm = TRUE)+1 : dim(loc_list)[1]
+names(loc_list)[names(loc_list) == "Freq"] <- "status"
+loc_list$status <- as.character(loc_list$status)
 
 # Bind with plantR's gaz and save
-file_name3 <- "editted_gaz.xlsx"
-gaz <- dplyr::bind_rows(gaz, loc_new_table)
-writexl::write_xlsx(gaz, file.path(file_path2, file_name3))
+file_name3 <- "editted_gaz_new_fixLoc.xlsx"
+gaz1 <- dplyr::bind_rows(gaz, loc_list)
+writexl::write_xlsx(gaz1, file.path(file_path2, file_name3))
 rm(list=ls())
 
 
-
+##### NOS NOVOS #####
 
 

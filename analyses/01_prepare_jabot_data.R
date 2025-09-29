@@ -10,7 +10,7 @@ if(!dir.exists(file_path))
 # Loading all family names presented in our checklist
 family_names <- here::here("data", "derived-data", "family_names.rds")
 family_names <- readRDS(file.path(family_names))
-family_names <- toupper(family_names)
+# family_names <- toupper(family_names)
 
 # Loading our taxonomy to fix the names
 our_names <- readRDS(file.path(here::here("data", "derived-data", "checklist_standardized.rds")))
@@ -83,70 +83,70 @@ for(i in family_names){
   
   cat("Preparing", i, "\n")
   
-    # If data loaded is NULL or has no rows
-  if (is.null(jabot_data) || nrow(jabot_data) == 0) {
+  jabot_data1 <- jabot_data[jabot_data$family %in% i, ]
+  
+  # If data loaded is NULL or has no rows
+  if (is.null(jabot_data1) || nrow(jabot_data1) == 0) {
     cat("Skipping", " ", i, ":", " no registers found\n", sep = "")
     dir.create(file.path(file_path, i), showWarnings = FALSE)
     next
   }
   
-  jabot_data <- jabot_data[jabot_data$family %in% i, ]
-  
   # Data formatting in DwC
-  jabot_data <- plantR::formatDwc(user_data = jabot_data)
+  jabot_data1 <- plantR::formatDwc(user_data = jabot_data1)
   
   
   # Data standardization ----------------------------------------------------
   
   
   ##### Standardizing collection codes #####
-  jabot_data <- plantR::getCode(jabot_data) # later update plantR:::collectionCodes with 00_get_collections.R
+  jabot_data1 <- plantR::getCode(jabot_data1) # later update plantR:::collectionCodes with 00_get_collections.R
   
   ##### Standardizing names of collectors and determiners #####
   
   # First collector
-  jabot_data$recordedBy.new <- plantR::prepName(jabot_data$recordedBy,
+  jabot_data1$recordedBy.new <- plantR::prepName(jabot_data1$recordedBy,
                                             output = "first",
                                             sep.out = "; ")
   # Auxilliary collectors
-  jabot_data$recordedBy.aux <- plantR::prepName(jabot_data$recordedBy,
+  jabot_data1$recordedBy.aux <- plantR::prepName(jabot_data1$recordedBy,
                                             output = "aux",
                                             sep.out = "; ")
   # First determiner
-  jabot_data$identifiedBy.new <- plantR::prepName(jabot_data$identifiedBy,
+  jabot_data1$identifiedBy.new <- plantR::prepName(jabot_data1$identifiedBy,
                                               output = "first",
                                               sep.out = "; ")
   # Auxilliary determiners
-  jabot_data$identifiedBy.aux <- plantR::prepName(jabot_data$identifiedBy,
+  jabot_data1$identifiedBy.aux <- plantR::prepName(jabot_data1$identifiedBy,
                                               output = "aux",
                                               sep.out = "; ")
   
   # Name notations
-  jabot_data$recordedBy.new <- plantR::missName(jabot_data$recordedBy.new,
+  jabot_data1$recordedBy.new <- plantR::missName(jabot_data1$recordedBy.new,
                                                  type = "collector",
                                                  noName = "s.n")
-  jabot_data$identifiedBy.new <- plantR::missName(jabot_data$identifiedBy.new,
+  jabot_data1$identifiedBy.new <- plantR::missName(jabot_data1$identifiedBy.new,
                                                    type = "determiner",
                                                    noName = "s.n")
   
   # Extract the last name of the collector to future standardization
-  jabot_data$last.name <- plantR::lastName(jabot_data$recordedBy.new)
+  jabot_data1$last.name <- plantR::lastName(jabot_data1$recordedBy.new)
   
   # Collector number
-  jabot_data$recordNumber.new <- plantR::colNumber(jabot_data$recordNumber, noNumb = "s.n.")
+  jabot_data1$recordNumber.new <- plantR::colNumber(jabot_data1$recordNumber, noNumb = "s.n.")
   
   # Collection and identification year #### Check with Renato: plantR::getYear("01/02/99") ####
   # if we use as.Date("01/02/99", format = "%d/%m/%y") we get 1999 but this may well be 1899...
   
-  jabot_data$year.new <- plantR::getYear(jabot_data$year, noYear = "n.d.")
-  jabot_data$yearIdentified.new <- plantR::getYear(jabot_data$dateIdentified, noYear = "n.d.")
+  jabot_data1$year.new <- plantR::getYear(jabot_data1$year, noYear = "n.d.")
+  jabot_data1$yearIdentified.new <- plantR::getYear(jabot_data1$dateIdentified, noYear = "n.d.")
   
   
   # Data editing ------------------------------------------------------------
   
   
   # Formatting locality information at different scales
-  jabot_data <- plantR::fixLoc(jabot_data,
+  jabot_data1 <- plantR::fixLoc(jabot_data1,
                                 loc.levels = c("country",
                                                "stateProvince", 
                                                "municipality", 
@@ -154,7 +154,7 @@ for(i in family_names){
                                 scrap = TRUE)
   
   # Get and simplify locality string create by strLoc
-  locs <- plantR::strLoc(jabot_data)
+  locs <- plantR::strLoc(jabot_data1)
   
   # Simplify
   locs$loc.string <- plantR::prepLoc(locs$loc.string) # priority string
@@ -164,8 +164,8 @@ for(i in family_names){
   # Cross the simplified strings against plantR's gazetteer
   locs <- plantR::getLoc(locs, gazet = "plantR")
   
-  # Bind the information obtained from the gazetteer into jabot_data
-  jabot_data <- cbind.data.frame(jabot_data, locs[, c("loc",
+  # Bind the information obtained from the gazetteer into jabot_data1
+  jabot_data1 <- cbind.data.frame(jabot_data1, locs[, c("loc",
                                                         "loc.correct",
                                                         "latitude.gazetteer",
                                                         "longitude.gazetteer",
@@ -175,10 +175,10 @@ for(i in family_names){
   ##### Editing geographical coordinates #####
   
   # Transforms the coordinates into decimal degrees
-  jabot_data <- plantR::prepCoord(jabot_data)
+  jabot_data1 <- plantR::prepCoord(jabot_data1)
   
   # Missing coordinates can be obtained from the gazetteer
-  jabot_data <- plantR::getCoord(jabot_data)
+  jabot_data1 <- plantR::getCoord(jabot_data1)
   
   
   # Skipping formatTax steps since we already used our taxonomy to fix the names
@@ -188,45 +188,45 @@ for(i in family_names){
   
   
   # Validating locality information
-  jabot_data <- plantR::validateLoc(jabot_data)
+  jabot_data1 <- plantR::validateLoc(jabot_data1)
   
   # Validating original coordinates at country, state, and county level
-  jabot_data <- plantR::checkCoord(jabot_data,
+  jabot_data1 <- plantR::checkCoord(jabot_data1,
                                     keep.cols = c("geo.check",
                                                   "NAME_0",
                                                   "country.gazet"))
   
   # Validating coordinates due to rounding precision
-  jabot_data <- plantR::checkBorders(jabot_data, output = "same.col")
+  jabot_data1 <- plantR::checkBorders(jabot_data1, output = "same.col")
   
   # Validating coordinates in the sea but close to the shore
-  jabot_data <- plantR::checkShore(jabot_data, output = "same.col")
+  jabot_data1 <- plantR::checkShore(jabot_data1, output = "same.col")
   
   # Validating inverted and swapped coordinates
-  jabot_data <- plantR::checkInverted(jabot_data, output = "same.col")
+  jabot_data1 <- plantR::checkInverted(jabot_data1, output = "same.col")
   
   # Validating records from cultivated individuals
-  jabot_data <- plantR::getCult(jabot_data)
+  jabot_data1 <- plantR::getCult(jabot_data1)
   
   # Validating spatial outliers
-  jabot_data <-  plantR::checkOut(jabot_data, 
+  jabot_data1 <-  plantR::checkOut(jabot_data1, 
                                    tax.name = "scientificName",
                                    clas.cut = 2.5,
                                    rob.cut = 12,
                                    keep.values = TRUE)
   
   # Validating records that are falling outside of the species' indicated botanical country
-  jabot_data <- plantR::checkDist(x = jabot_data,
+  jabot_data1 <- plantR::checkDist(x = jabot_data1,
                                    tax.name = "taxonName",
                                    tax.author = "taxonAuthor",
                                    loc = "loc.correct",
                                    source = "wcvp")
   
   # Validating confidence level of species determinators
-  jabot_data <- plantR::validateTax(jabot_data)
+  jabot_data1 <- plantR::validateTax(jabot_data1, , generalist = TRUE, print = FALSE)
   
   # Saving by collection and separating by family
-  plantR::saveData(jabot_data,
+  plantR::saveData(jabot_data1,
                    dir.name = i,
                    path = file_path,
                    by = "family",

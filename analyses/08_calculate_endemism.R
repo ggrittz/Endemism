@@ -32,16 +32,16 @@ for(i in family_names){
   }
 
   # Keeping all columns. They were filtered before anyway
-  all_fam[[i]] <- readRDS(family_path)  [, c("collectionCode.new", "recordedBy.new",
-                                             "identifiedBy.new", "recordNumber.new",
-                                             "year.new", "yearIdentified.new",
-                                             "country.new", "stateProvince.new",
-                                             "municipality.new", "locality.new",
-                                             "loc.correct1", "decimalLongitude.new", 
-                                             "decimalLatitude.new", "scientificName", 
-                                             "family", "our_efg", "is_nt", "efg_endemic",
-                                              "identifiedBy.new", "catalogNumber",
-                                             "geo.check1", "tax.check1")]
+  all_fam[[i]] <- readRDS(family_path)  # [, c("collectionCode.new", "recordedBy.new",
+                                        #     "identifiedBy.new", "recordNumber.new",
+                                        #     "year.new", "yearIdentified.new",
+                                        #     "country.new", "stateProvince.new",
+                                        #     "municipality.new", "locality.new",
+                                        #     "loc.correct1", "decimalLongitude.new", 
+                                        #     "decimalLatitude.new", "scientificName", 
+                                        #     "family", "our_efg", "is_nt", "efg_endemic",
+                                        #      "identifiedBy.new", "catalogNumber",
+                                        #     "geo.check1", "tax.check1")]
 }
 
 # Bind it all
@@ -264,11 +264,21 @@ for(i in seq_along(efg_names)){
   
   # Subset each group of single-biome endemics
   data_to_use <- final_df[final_df$scientificName %in% efg_end[[i]], ]
+  # Convert to terra and mask the points inside the specific biome-only
+  # This avoids duplicating cell names for later usage
+  data_to_use <- terra::vect(data_to_use, 
+                             geom = c("decimalLongitude.new", "decimalLatitude.new"),
+                             crs = "epsg:4326")
+  biome_polygon <- terra::as.polygons(terra::rast(rasterized_biomes[[i]]))
+  data_to_use <- terra::intersect(data_to_use, biome_polygon)
+  
+  # Back to data.frame
+  data_to_use <- terra::as.data.frame(data_to_use, geom = "XY")
   
   we_map_area = weighted.endemism(species_records = data_to_use,
                                   species = "scientificName",
-                                  latitude = "decimalLatitude.new",
-                                  longitude = "decimalLongitude.new",
+                                  latitude = "y",
+                                  longitude = "x",
                                   frame.raster = rasterized_biomes[[i]],
                                   outlier_pct = 99,
                                   weight.type = "geo",

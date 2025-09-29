@@ -53,6 +53,7 @@ herbarios <- vector("list", length(folders))
 names(herbarios) <- herbaria[!grepl("acam", herbaria)]
 
 for(i in seq_along(folders)){
+  cat("Reading herbaria", i, "\n")
   herbarios[[i]] <- data.table::fread(file.path(folders[i], "occurrence.txt"))
 }
 

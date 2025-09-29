@@ -351,16 +351,3 @@ to_save <- dplyr::left_join(plantR_complete, ih_herbaria[, cols],
 file_path <- here::here("data", "derived-data")
 file_name <- "plantR_complete.rds"
 saveRDS(to_save, file.path(file_path, file_name))
-
-
-
-
-
-
-
-
-
-
-
-
-  

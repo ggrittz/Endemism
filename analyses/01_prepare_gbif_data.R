@@ -29,7 +29,8 @@ worldMap <- plantR::worldMap
 devtools::load_all()
 
 # Preparing GBIF data -----------------------------------------------------
-
+# a = which(family_names %in% "Chloranthaceae")
+# family_names <- family_names[a:length(family_names)]
 for(i in family_names){
 
   cat("Preparing", i, "\n")
@@ -101,19 +102,19 @@ for(i in family_names){
     ##### Standardizing names of collectors and determiners #####
     
     # First collector
-    gbif_data$recordedBy.new <- my_prepName(gbif_data$recordedBy,
+    gbif_data$recordedBy.new <- plantR::prepName(gbif_data$recordedBy,
                                                  output = "first",
                                                  sep.out = "; ")
     # Auxilliary collectors
-    gbif_data$recordedBy.aux <- my_prepName(gbif_data$recordedBy,
+    gbif_data$recordedBy.aux <- plantR::prepName(gbif_data$recordedBy,
                                                  output = "aux",
                                                  sep.out = "; ")
     # First determiner
-    gbif_data$identifiedBy.new <- my_prepName(gbif_data$identifiedBy,
+    gbif_data$identifiedBy.new <- plantR::prepName(gbif_data$identifiedBy,
                                                    output = "first",
                                                    sep.out = "; ")
     # Auxilliary determiners
-    gbif_data$identifiedBy.aux <- my_prepName(gbif_data$identifiedBy,
+    gbif_data$identifiedBy.aux <- plantR::prepName(gbif_data$identifiedBy,
                                                    output = "aux",
                                                    sep.out = "; ")
     
@@ -222,7 +223,7 @@ for(i in family_names){
                                    source = "wcvp")
     
     # Validating confidence level of species determinators
-    gbif_data <- plantR::validateTax(gbif_data)
+    gbif_data <- plantR::validateTax(gbif_data, generalist = TRUE, print = FALSE)
     
     # Saving by collection and separating by family 
     plantR::saveData(gbif_data,
