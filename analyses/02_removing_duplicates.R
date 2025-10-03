@@ -111,6 +111,9 @@ for (i in family_names) {
   family_data <- plantR::rmDup(df = family_data,
                                rm.all = TRUE)
   
+  # id for later usage
+  family_data$ids <- paste0(i, "_", 1:nrow(family_data))
+  
   # Saving the cleaned data
   # Saving by collection and separating by family
   plantR::saveData(family_data,
