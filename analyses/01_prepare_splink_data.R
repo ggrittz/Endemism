@@ -145,19 +145,19 @@ for(i in family_names){
   ##### Standardizing names of collectors and determiners #####
   
   # First collector
-  splink_data$recordedBy.new <- plantR::prepName(splink_data$recordedBy,
+  splink_data$recordedBy.new <- my_prepName(splink_data$recordedBy,
                                                  output = "first",
                                                  sep.out = "; ")
   # Auxilliary collectors
-  splink_data$recordedBy.aux <- plantR::prepName(splink_data$recordedBy,
+  splink_data$recordedBy.aux <- my_prepName(splink_data$recordedBy,
                                                  output = "aux",
                                                  sep.out = "; ")
   # First determiner
-  splink_data$identifiedBy.new <- plantR::prepName(splink_data$identifiedBy,
+  splink_data$identifiedBy.new <- my_prepName(splink_data$identifiedBy,
                                                    output = "first",
                                                    sep.out = "; ")
   # Auxilliary determiners
-  splink_data$identifiedBy.aux <- plantR::prepName(splink_data$identifiedBy,
+  splink_data$identifiedBy.aux <- my_prepName(splink_data$identifiedBy,
                                                    output = "aux",
                                                    sep.out = "; ")
   
@@ -263,7 +263,7 @@ for(i in family_names){
                                    source = "wcvp")
   
   # Validating confidence level of species determinators
-  splink_data <- plantR::validateTax(splink_data, generalist = TRUE, print = FALSE)
+  splink_data <- plantR::validateTax(splink_data)
   
   # Saving by collection and separating by family
   plantR::saveData(splink_data,

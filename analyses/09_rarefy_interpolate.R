@@ -41,24 +41,12 @@ final_df1 <- terra::vect(final_df,
 # Get cell numbers for all points
 cell_numbers <- terra::cellFromXY(my_we_raster, terra::crds(final_df1))
 cell_numbers_biomes <- list()
-# Do the same for biomes; but using only the endemics to it
-cell_numbers_biomes <- lapply(names(my_we_raster_biomes),
+cell_numbers_biomes <- lapply(my_we_raster_biomes,
                               function(x) {
-                                # Get the raster for this biome
-                                biome_raster <- my_we_raster_biomes[[x]]
-                                # Get the endemic species for this biome
-                                endemic_species <- efg_end[[x]]
-                                # Subset the spatial points data for these endemic species
-                                final_df2 <- final_df1[final_df1$scientificName %in% endemic_species, ]
-                                # Convert raster to polygon for intersection
-                                biome_polygon <- terra::as.polygons(biome_raster)
-                                # Intersect points with biome polygon
-                                final_df2 <- terra::intersect(final_df2, biome_polygon)
-                                # Get cell numbers
-                                cells <- terra::cellFromXY(biome_raster, terra::crds(final_df2))
+                                cells <- terra::cellFromXY(x, terra::crds(final_df1))
                                 cells[!is.na(cells)]
                               })
-names(cell_numbers_biomes) <- names(my_we_raster_biomes)
+
 
 # Create a list split by cell numbers
 cell_species <- split(final_df1$scientificName, cell_numbers)
@@ -119,19 +107,19 @@ summary_df <- do.call(rbind, lapply(names(sc_df_biomes), function(x) {
     SC_max = max(biome_data$SC, na.rm = TRUE),
     SC_min = min(biome_data$SC, na.rm = TRUE),
     SC_mean = mean(biome_data$SC, na.rm = TRUE),
-    SC_median = median(biome_data$SC, na.rm = TRUE),
+    # SC_median = median(biome_data$SC, na.rm = TRUE),
     n_max = max(biome_data$n, na.rm = TRUE),
     n_min = min(biome_data$n, na.rm = TRUE),
     n_mean = mean(biome_data$n, na.rm = TRUE),
-    n_median = median(biome_data$n, na.rm = TRUE),
+    # n_median = median(biome_data$n, na.rm = TRUE),
     n_cells = nrow(biome_data)  # Number of cells in this biome
   )
 }))
 
 
-##### Estimates for diversity metrics #####
+# Asymptotic estimates for diversity metrics
 
-cl <- parallel::makeCluster(parallel::detectCores()-2)
+cl <- parallel::makeCluster(detectCores()-2)
 parallel::clusterEvalQ(cl, library("iNEXT"))
 parallel::clusterExport(cl, list("abundance_vectors"), envir = environment())
 
@@ -164,7 +152,7 @@ diversity_df = do.call("rbind.data.frame", tmp)
 
 ##### Adapting the same code but for biomes separately #####
 
-cl <- parallel::makeCluster(parallel::detectCores()-2)
+cl <- parallel::makeCluster(detectCores()-2)
 parallel::clusterEvalQ(cl, library("iNEXT"))
 
 # Process each biome separately
@@ -230,12 +218,25 @@ names(simp_df_biomes)[which(names(simp_df_biomes) == "Estimator")] <- "Simp.est"
 cell_id <- as.numeric(names(abundance_vectors))
 cell_id_biomes <- lapply(abundance_vectors_biomes, function(x) as.numeric(names(x)))
 
-# Separate what is going to be returned to the raster
+
+
+############################################################################################
+############################################################################################
+############################################################################################
+################### PAREI AQUI #############################################################
+############################################################################################
+############################################################################################
+############################################################################################
+
+
+
 sc_df <- data.frame(cell_id = as.numeric(sc_df$Assemblage),
                     n = sc_df$n,
                     S.obs = sc_df$S.obs,
                     Simp.obs = simp_df$Observed,
                     SC = sc_df$SC)
+
+
 # Get coordinates for these specific cells
 cell_coords <- data.frame(cell_id = cell_id,
                           x = terra::xFromCell(my_we_raster, cell_id),
@@ -244,6 +245,8 @@ cell_coords <- data.frame(cell_id = cell_id,
 cell_metrics <- dplyr::left_join(sc_df,
                                  cell_coords,
                                  by = "cell_id")
+# cell_metrics <- dplyr::left_join(cell_metrics, diversity_df[, c(1, 4)],
+#                                  by = "cell_id")
 
 # Populate new layers
 my_we_raster <- c(my_we_raster,
@@ -258,79 +261,6 @@ my_we_raster[["Simp.obs"]][cell_metrics$cell_id] <- cell_metrics$Simp.obs
 
 # Which cells are going to be used for interpolation?
 my_we_raster1 <- terra::as.data.frame(my_we_raster, xy = TRUE, cells = TRUE)
-
-
-
-##### Doing the same for each biome separately #####
-
-# Separate what is going to be returned to the raster
-sc_df_biomes <- lapply(sc_df_biomes, function(x) {
-  x$Assemblage <- as.numeric(x$Assemblage)
-  return(x)
-})
-
-cell_metrics_biomes <- list()
-
-# Iterate through each biome
-for(i in names(sc_df_biomes)) {
-  
-  sc_df_biome <- sc_df_biomes[[i]]
-  simp_df_biome <- simp_df_biomes[simp_df_biomes$biome == i, ]
-  raster_biome <- my_we_raster_biomes[[i]]
-  cell_id_biome <- cell_id_biomes[[i]]
-  
-  sc_df <- data.frame(cell_id = sc_df_biome$Assemblage,
-                      n = sc_df_biome$n,
-                      S.obs = sc_df_biome$S.obs,
-                      Simp.obs = simp_df_biome$Observed,
-                      SC = sc_df_biome$SC)
-  
-  cell_coords <- data.frame(cell_id = cell_id_biome,
-                            x = terra::xFromCell(raster_biome, cell_id_biome),
-                            y = terra::yFromCell(raster_biome, cell_id_biome))
-  
-  cell_metrics_biome <- dplyr::left_join(sc_df, cell_coords, by = "cell_id")
-  cell_metrics_biomes[[i]] <- cell_metrics_biome
-}
-
-
-# Populate the rasters now...
-raster_df_biomes <- vector("list", length(cell_metrics_biomes))
-names(raster_df_biomes) <- names(cell_metrics_biomes)
-
-# Iterate through each biome
-for(i in seq_along(cell_metrics_biomes)) {
-  
-  biome_name <- names(cell_metrics_biomes)[i]
-  cell_metrics_biome <- cell_metrics_biomes[[i]]
-  raster_biome <- my_we_raster_biomes[[i]]
-  
-  sc_layer <- terra::rast(raster_biome)
-  n_layer <- terra::rast(raster_biome)
-  sobs_layer <- terra::rast(raster_biome)
-  simp_layer <- terra::rast(raster_biome)
-  
-  terra::values(sc_layer) <- NA
-  terra::values(n_layer) <- NA
-  terra::values(sobs_layer) <- NA
-  terra::values(simp_layer) <- NA
-  
-  raster_biome <- c(raster_biome, sc_layer, n_layer, sobs_layer, simp_layer)
-  n_layers <- terra::nlyr(raster_biome)
-  names(raster_biome)[(n_layers-3):n_layers] <- c("SC", "n", "S.obs", "Simp.obs")
-  
-  raster_biome[["SC"]][cell_metrics_biome$cell_id] <- cell_metrics_biome$SC
-  raster_biome[["n"]][cell_metrics_biome$cell_id] <- cell_metrics_biome$n
-  raster_biome[["S.obs"]][cell_metrics_biome$cell_id] <- cell_metrics_biome$S.obs
-  raster_biome[["Simp.obs"]][cell_metrics_biome$cell_id] <- cell_metrics_biome$Simp.obs
-  
-  raster_df_biome <- terra::as.data.frame(raster_biome, xy = TRUE, cells = TRUE)
-  raster_df_biomes[[i]] <- raster_df_biome
-  
-}
-
-my_we_raster_biomes1 <- dplyr::bind_rows(raster_df_biomes, .id = "biome")
-names(my_we_raster_biomes1)[which(names(my_we_raster_biomes1) == "our_efg")] <- "we"
 
 ##### Using sample coverage and N cut-offs following Lima et al. 2020 #####
 
@@ -352,54 +282,18 @@ cond3 <- my_we_raster1$SC >= sc_quantiles["75%"] &
   my_we_raster1$n >= 30 # 50 / 75
 
 # Tag rows that meet any condition
-# We are using 37% of cells to interpolate in all tropical America
+# We are using 37% of cells to interpolate
 my_we_raster1$use_this <- cond1 | cond2 | cond3
 # Changing one name
 names(my_we_raster1)[which(names(my_we_raster1) == "our_efg")] <- "we"
 
-
-##### Finding rarefaction values for the top 3 biomes in sampling effort #####
-# get_these_lowland <- which(grepl("lowland", my_we_raster_biomes1$biome))
-# sc_quantiles_lowland <- quantile(my_we_raster_biomes1$SC[get_these_lowland], 
-#                                  probs = c(0.25, 0.50, 0.75))
-# 
-# get_these_montane <- which(grepl("montane", my_we_raster_biomes1$biome))
-# sc_quantiles_montane <- quantile(my_we_raster_biomes1$SC[get_these_montane], 
-#                                  probs = c(0.25, 0.50, 0.75))
-# 
-# get_these_dry <- which(grepl("thickets", my_we_raster_biomes1$biome))
-# sc_quantiles_dry <- quantile(my_we_raster_biomes1$SC[get_these_dry], 
-#                                  probs = c(0.25, 0.50, 0.75))
-# 
-# # Conditions for each one of them separately
-# # Condition 1: between 25 and 50 quantiles of sc and more than 75 occ. (were 100)
-# cond1_lowland <- my_we_raster_biomes1$SC[get_these_lowland] >= sc_quantiles_lowland["25%"] & 
-#   my_we_raster_biomes1$SC[get_these_lowland] <= sc_quantiles_lowland["50%"] & 
-#   my_we_raster_biomes1$n[get_these_lowland] >= 75 # 100 ou inverter 25
-# 
-# # Condition 2: between 50 and 75 quantiles of sc and more than 35 occ. (were 50)
-# cond2_lowland <- my_we_raster_biomes1$SC[get_these_lowland] >= sc_quantiles_lowland["50%"] & 
-#   my_we_raster_biomes1$SC[get_these_lowland] <= sc_quantiles_lowland["75%"] & 
-#   my_we_raster_biomes1$n[get_these_lowland] >= 35 # 75 / 50
-# 
-# # Condition 3: more than 75 quantiles of sc and more than 30 occ.
-# cond3_lowland <- my_we_raster_biomes1$SC[get_these_lowland] >= sc_quantiles_lowland["75%"] & 
-#   my_we_raster_biomes1$n[get_these_lowland] >= 30 # 50 / 75
-# 
-# 
-# # We are using 37% of cells to interpolate in all tropical America
-# my_we_raster_biomes2$use_this <- NA
-# my_we_raster_biomes2$use_this[get_these_lowland] <- cond1_lowland | cond2_lowland | cond3_lowland
-
-
-##### I am not rarefying biomes separately... #####
 
 
 # Interpolating diversity metrics -----------------------------------------
 
 # Grid to predict the the metrics
 my_we_grid <- terra::rast(extent = terra::ext(my_we_raster),
-                          resolution = 0.01,
+                          resolution = 0.25,
                           crs = terra::crs(my_we_raster))
 my_we_grid <- terra::as.data.frame(my_we_grid, xy = TRUE, na.rm = FALSE)
 my_we_grid$lyr.1 <- NULL
@@ -407,7 +301,6 @@ my_we_grid$lyr.1 <- NULL
 # Using only the minimum SC points
 my_we_pts_sp <- my_we_raster1[my_we_raster1$use_this %in% TRUE, ]
 sp::coordinates(my_we_pts_sp) <- ~x+y
-
 
 ##### Interpolating weighted endemism #####
 
@@ -424,6 +317,12 @@ krig_mod <- gstat::gstat(id = "we",
                                             range = vario[2, 3],
                                             kappa = vario[2, 4]),
                          nmax = 30)
+
+
+
+# Setting the USSE method as the minimum sample coverage value in our data
+# my_we_grid$n <- (my_we_raster1$n[my_we_raster1$use_this %in% TRUE])
+# my_we_grid$SC <- min(my_we_raster1$SC[my_we_raster1$use_this %in% TRUE])
 
 # Predict the WE model in the grid
 my_we_grid$krig.we <- predict(krig_mod, my_we_grid)$we.pred
@@ -447,6 +346,7 @@ krig_mod <- gstat::gstat(id = "S.obs",
 
 # Predict the observed species richness model in the grid
 my_we_grid$krig.s.obs <- predict(krig_mod, my_we_grid)$S.obs.pred
+
 
 
 # Interpolating observed Simpson diversity --------------------------------
@@ -474,69 +374,19 @@ my_we_grid <- terra::rast(x = my_we_grid, crs = "epsg:4326")
 # Crop and mask
 my_int <- terra::crop(my_we_grid, tropical_america)
 my_int <- terra::mask(my_int, tropical_america)
+th_we <- terra::global(my_int$krig.we, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
+th_we_bin <- my_int$krig.we > th_we
+th_we_bin <- terra::as.polygons(th_we_bin, dissolve = TRUE)
+terra::plot(my_int$krig.we, main = "mine", col = hcl.colors(n = 100, "RdYlBu", rev = T))
+terra::plot(th_we_bin[th_we_bin$krig.we == 1, ], lwd = 3, add = T)
+
+
 # Save this result
 terra::writeRaster(my_int, here::here("data", "derived-data", 
-                                      "maps", "interpolated_maps1km.tiff"),
+                                      "maps", "interpolated_maps25km.tiff"),
                    overwrite = TRUE)
 
 
-
-
-##############################################################
-##############################################################
-##############################################################
-##### DOING THE SAME THING BUT FOR EACH BIOME SEPARATELY #####
-##############################################################
-##############################################################
-##############################################################
-
-# Interpolating diversity metrics -----------------------------------------
-
-# Biomes map
-biomes_map <- terra::vect(here::here("data", "derived-data", "maps", "NTAmericas_efgs.shp"))
-biomes_map <- biomes_map[biomes_map$Morrone_re %in% "Neotropical", ]
-# Filter only the ones with endemic species
-biomes_map <- biomes_map[biomes_map$our_efg %in% names(efg_end), ]
-
-# Looping for each biome that contains more than 200 endemic species
-# Otherwise interpolation maps become unfeasible to make
-biome_names <- names(efg_end)[sapply(efg_end, function(x) length(x) >= 200)]
-my_we_grid_biomes <- vector("list", length(biome_names))
-names(my_we_grid_biomes) <- biome_names
-
-for(i in names(my_we_grid_biomes)){
-cat("Interpolating data from", i, "\n")
-# Grid to predict the the metrics
-# Rasterize the extent of the 
-my_we_grid <- terra::rast(extent = terra::ext(biomes_map[biomes_map$our_efg %in% i, ]),
-                          resolution = 0.01,
-                          crs = terra::crs(biomes_map))
-
-my_we_pts_sp <- my_we_raster_biomes1[my_we_raster_biomes1$biome %in% i, ]
-my_we_pts_sp <- terra::vect(my_we_pts_sp, geom = c("x", "y"), crs = "epsg:4326")
-my_we_pts_sp$log.we <- log(my_we_pts_sp$we)
-x <- terra::interpIDW(x = my_we_grid, 
-                      y = my_we_pts_sp, 
-                      field = "log.we",
-                      smooth = 2,
-                      power = 2, 
-                      radius = 2)
-
-# Crop, mask, and save
-x_clipped <- terra::crop(x, biomes_map[biomes_map$our_efg %in% i, ])
-x_clipped <- terra::mask(x, biomes_map[biomes_map$our_efg %in% i, ])
-my_we_grid_biomes[[i]] <- x_clipped
-
-}
-
-# Save separately
-filenames <- paste0("interpolated_maps_biomes_1km_", 
-                    make.names(names(my_we_grid_biomes)), ".tiff")
-
-for (i in seq_along(my_we_grid_biomes)) {
-  terra::writeRaster(my_we_grid_biomes[[i]], 
-                     here::here("data", "derived-data", "maps", filenames[i]))
-}
 
 # Some metrics and plots --------------------------------------------------
 

@@ -10,31 +10,19 @@ file1 <- "end_per_efg.rds"
 file2 <- "spp_per_efg.rds"
 file3 <- "we_map_area_50km.tiff"
 # Substitute here later for 1 km map
-file4 <- "interpolated_maps1km.tiff"
-file44 <- "_biomes_"
+file4 <- "interpolated_maps25km.tiff"
 file5 <- "final_df.rds"
 file6 <- "missing_trees.rds"
 file7 <- "checklist_standardized.rds"
-# file8 <- "we_map_area_50km_null_model.rds"
+file8 <- "we_map_area_50km_null_model.rds"
 file9 <- "efg_summary_table.csv"
-# file10 <- "hotspots_2016_1.shp"
+file10 <- "hotspots_2016_1.shp"
 
 end_efg <- readRDS(file.path(file_path1, file1))
 spp_efg <- readRDS(file.path(file_path1, file2))
 wee_map <- terra::rast(file.path(file_path2, file3)) 
 int_map <- terra::rast(file.path(file_path2, file4))
-# biomes...
-all_files <- list.files(file_path2, full.names = TRUE)
-biome_files <- all_files[grepl("_biomes_", all_files)]
-biome_names <- gsub("^.*_([^_]+)\\.tiff$", "\\1", basename(biome_files))
-int_map_biomes <- vector("list", length(biome_files))
-for (i in seq_along(biome_files)) {
-  int_map_biomes[[i]] <- terra::rast(biome_files[i])
-}
-names(int_map_biomes) <- biome_names
-int_map_biomes$Intertidal.forests.and.shrublands <- NULL
-
-# null_model <- readRDS(file.path(file_path1, file8))
+null_model <- readRDS(file.path(file_path1, file8))
 scatt <- read.csv(file.path(file_path3, file9))
 my_df <- readRDS(file.path(file_path1, file5)) 
 my_df1 <- my_df[, c("decimalLongitude.new", "decimalLatitude.new")]
@@ -43,31 +31,38 @@ my_df1 <- terra::vect(my_df1,
                                "decimalLatitude.new"),
                       crs = "epsg:4326")
 our_names <- readRDS(file.path(file_path0, file7))
-# a <- our_names[grepl("herb", our_names$lifeForm_aggregated),]
+a <- our_names[grepl("herb", our_names$lifeForm_aggregated),]
 
 # Shapefiles...
 america <- terra::vect(here::here("data", "derived-data", "maps", "NTAmericas_efgs.shp"))
-# Separate tropical America
 tropical_america <- america[america$Morrone_re %in% "Neotropical", ]
 tropical_america_diss <- terra::aggregate(tropical_america, cores = 8)
-tropical_america_diss <- terra::fillHoles(tropical_america_diss)
-
-# Whole
-america <- terra::aggregate(america, cores = 8)
-america <- terra::fillHoles(america)
+# hotspots <- terra::vect(file.path("data", "raw-data", "maps", file10))
+# hotspots <- terra::project(hotspots, tropical_america)
+# 
+# hotspots <- hotspots[hotspots$NAME %in% c("Atlantic Forest",
+#                                           "Caribbean Islands",
+#                                           "Cerrado",
+#                                           "Chilean Winter Rainfall and Valdivian Forests",
+#                                           "Madrean Pine-Oak Woodlands",
+#                                           "Mesoamerica",
+#                                           "Tropical Andes",
+#                                           "Tumbes-Choco-Magdalena")]
+# hotspots <- hotspots[hotspots$Type %in% "hotspot area", ]
 
 # Preparing the study region map ------------------------------------------
+america_neo <- america[america$Morrone_re %in% "Neotropical", ]
 cores <- MetroBrewer::metro.brewer("Beijing", 
                                    n = 19,
                                    return_hex = T)
 
-names(cores) <- tropical_america$our_efg
-tropical_america$our_efg <- factor(tropical_america$our_efg, levels = names(cores))
+names(cores) <- america_neo$our_efg
+america_neo$our_efg <- factor(america_neo$our_efg, levels = names(cores))
 
 svg("figures/StudyArea.svg", width = 10, height = 10)
 # Main plot of Neotropics
-terra::plot(tropical_america, 
-            col = cores[tropical_america$our_efg],
+terra::plot(america_neo, 
+            col = cores[america_neo$our_efg],
             # main = "Neotropical Ecossystem Functional Groups",
             xlab = "Longitude",
             ylab = "Latitude",
@@ -75,7 +70,7 @@ terra::plot(tropical_america,
             pax = list(cex.axis = 1.4))
 
 # The rest of it
-terra::plot(america,
+terra::plot(america[!america$Morrone_re %in% "Neotropical", ],
             add = TRUE)
 #xlab = "Longitude",
 #ylab = "Latitude",
@@ -104,134 +99,90 @@ quantile_vals <- terra::global(dens, quantile, probs = seq(0, 1, 0.05), na.rm = 
 breaks <- as.numeric(quantile_vals)
 labels <- names(quantile_vals)
 
-##### 90th percent quantile for all metrics #####
+# 90th percent quantile for more records per area
+# th_dens <- terra::global(log(dens), fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
+svg("figures/Figure1.svg", width = 10, height = 10)
 
-# Observed weighted endemism
+par(mfrow = c(2, 2))
+terra::plot(log(dens),
+            main = "Sampling effort",
+            col = hcl.colors(n = 100, "RdYlBu", rev = T),
+            # add = TRUE,
+            cex.main = 1.75,
+            cex.lab = 1.5,
+            pax = list(cex.axis = 1.4),
+            legend = F)
+
+terra::plot(tropical_america_diss,
+            # xlab = "Longitude",
+            # ylab = "Latitude",
+            # main = "Sampling effort (50 x 50 km)",
+            cex.lab = 1.5,
+            pax = list(cex.axis = 1.4),
+            add = TRUE)
+# terra::sbar(d = 1000, type = "bar", divs = 3, 
+#             xy = "bottomright", lonlat = TRUE, below = "km")
+# legend(x = -100,
+#        y = -20,
+#        labels = paste(seq(0, 100, 20)),
+#        fill = breaks)
+
+# Plotting
+# Get 90th quantile for each case
 th_we <- terra::global(int_map$krig.we, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
+# Do the same for obs richness and simpson
+th_s.obs <- terra::global(int_map$krig.s.obs, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
+th_simp.obs <- terra::global(int_map$krig.simp.obs, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
+
+# Get contours only for all maps
 th_we_bin <- int_map$krig.we > th_we
 th_we_bin <- terra::as.polygons(th_we_bin, dissolve = TRUE)
-# Keep only 1
-th_we_bin <- th_we_bin[th_we_bin$krig.we == 1, ]
-# Disaggregate to measure polygon sizes
-th_we_bin_dis <- terra::disagg(th_we_bin)
-th_we_bin_area <- terra::expanse(th_we_bin_dis, unit = "km")
-th_we_bin_dis$area_km2 <- round(th_we_bin_area, 1)
-# Keeping only > 50 km² polygons to ease big pattern visualization and also since
-# this is our base area
-th_we_bin_dis <- th_we_bin_dis[th_we_bin_dis$area_km2 > 50, ]
-# terra::plot(int_map$krig.we, main = "xxx", col = hcl.colors(n = 100, "RdYlBu", rev = T))
-# terra::plot(th_we_bin_dis, lwd = 3, add = T)
-
-# Observed richness
-th_s.obs <- terra::global(int_map$krig.s.obs, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
 th_s.obs_bin <- int_map$krig.s.obs > th_s.obs
 th_s.obs_bin <- terra::as.polygons(th_s.obs_bin, dissolve = TRUE)
-# Keep only 1
-th_s.obs_bin <- th_s.obs_bin[th_s.obs_bin$krig.s.obs == 1, ]
-# Disaggregate to measure polygon sizes
-th_s.obs_bin_dis <- terra::disagg(th_s.obs_bin)
-th_s.obs_bin_area <- terra::expanse(th_s.obs_bin_dis, unit = "km")
-th_s.obs_bin_dis$area_km2 <- round(th_s.obs_bin_area, 1)
-# Keeping only > 50 km² polygons to ease big pattern visualization and also since
-# this is our base area
-th_s.obs_bin_dis <- th_s.obs_bin_dis[th_s.obs_bin_dis$area_km2 > 50, ]
-# terra::plot(int_map$krig.s.obs, main = "xxx", col = hcl.colors(n = 100, "RdYlBu", rev = T))
-# terra::plot(th_s.obs_bin_dis, lwd = 3, add = T)
-
-# Observed Simpson
-th_simp.obs <- terra::global(int_map$krig.simp.obs, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
 th_simp.obs_bin <- int_map$krig.simp.obs > th_simp.obs
 th_simp.obs_bin <- terra::as.polygons(th_simp.obs_bin, dissolve = TRUE)
-# Keep only 1
-th_simp.obs_bin <- th_simp.obs_bin[th_simp.obs_bin$krig.simp.obs == 1, ]
-# Disaggregate to measure polygon sizes
-th_simp.obs_bin_dis <- terra::disagg(th_simp.obs_bin)
-th_simp.obs_bin_area <- terra::expanse(th_simp.obs_bin_dis, unit = "km")
-th_simp.obs_bin_dis$area_km2 <- round(th_simp.obs_bin_area, 1)
-# Keeping only > 50 km² polygons to ease big pattern visualization and also since
-# this is our base area
-th_simp.obs_bin_dis <- th_simp.obs_bin_dis[th_simp.obs_bin_dis$area_km2 > 50, ]
-# terra::plot(int_map$krig.simp.obs, main = "xxx", col = hcl.colors(n = 100, "RdYlBu", rev = T))
-# terra::plot(th_simp.obs_bin_dis, lwd = 3, add = T)
-
-# Make layout
-my_lay <- matrix(c(1, 2, 3, 7, 1, 4, 5, 7, 6, 6, 6, 6),
-                 nrow = 3, ncol = 4, byrow = TRUE)
-{
-svg("figures/Figure1.svg", width = 33, height = 30)
-
-layout(my_lay, 
-       widths = c(0.05, 0.4375, 0.4375, 0.075),
-       heights = c(0.475, 0.475, 0.05))
-layout.show(7)
-
-# Shared y-axis
-par(mar = c(0, 0, 0, 0))
-plot(1, type = "n", axes = FALSE, xlab = "", ylab = "")
-mtext("Latitude", side = 4, line = -8, cex = 4.5)
-
-# Sampling effort
-par(mar = c(0, 0, 0, 0))
-terra::plot(log(dens),
-            main = "(a) Sampling effort",
-            col = hcl.colors(n = 100, "RdYlBu", rev = T),
-            cex.main = 6,
-            pax = list(cex.axis = 5, las = 1, xaxt = "n", mgp = c(3, 2.5, 0)),
-            legend = F,
-            axes = T)
-terra::plot(america, add = TRUE)
 
 # Species richness
-par(mar = c(0, 0, 0, 0))
 terra::plot(int_map$krig.s.obs,
-            main = "(b) Species richness",
-            cex.main = 6,
-            pax = list(cex.axis = 5, las = 1, xaxt = "n", yaxt = "n"),
+            #
+            #
+            main = "Species richness",
+            cex.main = 1.75,
+            cex.lab = 1.5,
+            pax = list(cex.axis = 1.4),
             col = hcl.colors(n = 100, "RdYlBu", rev = T),
-            legend = F,
-            axes = T)
-terra::plot(th_s.obs_bin_dis, lwd = 5, add = T)
-terra::plot(america, add = TRUE)
+            legend = F)
+terra::plot(th_s.obs_bin[th_s.obs_bin$krig.s.obs == 1, ],
+            lwd = 3, add = T)
+
 
 # Simpson diversity
-par(mar = c(0, 0, 0, 0))
 terra::plot(int_map$krig.simp.obs,
-            main = "(c) Simpson diversity",
-            cex.main = 6,
-            pax = list(cex.axis = 5, las = 1, mgp = c(3, 2.5, 0)),
+            #
+            #
+            main = "Simpson diversity",
+            cex.main = 1.75,
+            cex.lab = 1.5,
+            pax = list(cex.axis = 1.4),
             col = hcl.colors(n = 100, "RdYlBu", rev = T),
-            legend = F,
-            axes = T)
-terra::plot(th_simp.obs_bin_dis, lwd = 5, add = T)
-terra::plot(america, add = TRUE)
+            legend = F)
+terra::plot(th_simp.obs_bin[th_simp.obs_bin$krig.simp.obs == 1, ],
+            lwd = 3, add = T)
 
-# Weighted endemism
-par(mar = c(0, 0, 0, 0))
+# WE
 terra::plot(int_map$krig.we, 
-            main = "(d) Weighted endemism",
-            cex.main = 6,
-            pax = list(cex.axis = 5, las = 1, yaxt = "n", mgp = c(3, 2.5, 0)),
+            #xlab = "Longitude",
+            #ylab = "Latitude",
+            main = "Weighted endemism",
+            cex.main = 1.75,
+            cex.lab = 1.5,
+            pax = list(cex.axis = 1.4),
             col = hcl.colors(n = 100, "RdYlBu", rev = T), 
-            legend = F,
-            axes = T)
-terra::plot(th_we_bin_dis, lwd = 5, add = T)
-terra::plot(america, add = TRUE)
-# box()
+            legend = F)
+terra::plot(th_we_bin[th_we_bin$krig.we == 1, ],
+            lwd = 3, add = T)
 
-# Shared x-axis
-par(mar = c(0, 0, 0, 0))
-plot(1, type = "n", axes = FALSE, xlab = "", ylab = "")
-mtext("Longitude", side = 3, line = -3, cex = 4)
-
-# Legend bar
-par(mar = c(0, 9.5, 0, 0))
-plot(1, type = "n", xlim = c(0, 1), ylim = c(0, 100), axes = FALSE, xlab = "", ylab = "")
-colramp <- hcl.colors(n = 100, "RdYlBu", rev = T)
-rect(0.2, 0:99, 0.8, 1:100, col = colramp, border = NA)
-axis(2, at = c(0, 50, 100), labels = c("Low", "Medium", "High"), las = 1, cex.axis = 4.5, line = -0.5)
-# text(0.5, -5, "Value", xpd = TRUE, cex = 1.2)
 dev.off()
-}
 
 
 
@@ -248,47 +199,6 @@ result <- terra::aggregate(top90_area_km2 ~ our_efg, data = as.data.frame(inters
 scatt <- dplyr::left_join(scatt, result, by = c("EFG" = "our_efg"))
 scatt$prop_top90_area_km2 <- 100 * (scatt$top90_area_km2 / scatt$EFG_area_km)
 write.csv(scatt, file.path(file_path3, file9))
-
-
-
-# Making one plot for each biome here -------------------------------------
-# Fix the layout matrix for 5 plots
-my_layout <- matrix(c(1, 2, 3, 2, 4, 5),  # 0 for empty cell
-                    nrow = 3, ncol = 2, byrow = TRUE)
-layout(my_layout, 
-       widths = c(0.5, 0.5),
-       heights = c(0.333, 0.333, 0.333))
-layout.show(5)  
-
-my_order <- c(4, 5, 3, 1, 2)
-my_order_biome_names <- biome_names[2:6]
-my_order_biome_names <- my_order_biome_names[my_order]
-
-for(i in seq_along(my_order_biome_names)){
-  svg(paste0(here::here("figures"), "/", "FigureS3_", 
-             my_order_biome_names[i], ".svg"), width = 10, height = 13)
-  biome_name <- my_order_biome_names[i]
-  
-  th_we <- terra::global(int_map_biomes[[biome_name]], fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
-  th_we_bin <- int_map_biomes[[biome_name]] >= th_we
-  th_we_bin <- terra::as.polygons(th_we_bin, dissolve = TRUE)
-  th_we_bin <- th_we_bin[th_we_bin$lyr.1 == 1, ]
-  
-  # Disaggregate to measure polygon sizes
-  # th_we_bin_dis <- terra::disagg(th_we_bin)
-  # th_we_bin_area <- terra::expanse(th_we_bin_dis, unit = "km")
-  par(mar = c(2, 3, 2, 2))
-  terra::plot(int_map_biomes[[biome_name]], 
-              col = hcl.colors(n = 100, "RdYlBu", rev = T),
-              main = gsub("\\.", " ", biome_name),  # Use biome_name directly
-              xlab = "Longitude",
-              ylab = "Latitude",
-              cex.lab = 1.5,
-              pax = list(cex.axis = 1.4))
-  terra::plot(th_we_bin, lwd = 3, add = T)
-  terra::plot(tropical_america_diss, add = TRUE)
-  dev.off()
-}
 
 
 

@@ -10,19 +10,6 @@ file_path2 <- here::here("data", "derived-data", "Endemic_species")
 file_name <- "latamMap_classified.gpkg"
 latam_gaz <- terra::vect(file.path(file_path, file_name))
 
-# Load equivalence table for administrative levels that exist in gazetteer
-# This is going to be used for keeping records at X, Y, Z adm level
-options(gargle_oauth_cache = ".secrets")
-# googlesheets4::gs4_auth() # is this needed?
-googlesheets4::gs4_auth(cache = ".secrets",
-                        email = "ggrittz@usp.br",
-                        scopes = "https://www.googleapis.com/auth/spreadsheets.readonly")
-# Download from Google Drive
-link <- "https://docs.google.com/spreadsheets/d/"
-link1 <- "1V42RsVpUQuiHbv-U6U_t--8mCAr7UOjQLpQ9Awq6PRI/edit?gid=0#gid=0"
-eq_table <- as.data.frame(googlesheets4::read_sheet(paste0(link, link1), range = "A:G"))
-eq_table <- eq_table[, c("country", "latamMap_GADM")]
-
 # Fast preparing latam_gaz complete loc.correct1 (NAME_all) in the same way
 # it is from loc.correct
 latam_gaz <- terra::as.data.frame(latam_gaz, geom = "WKT")
@@ -63,19 +50,14 @@ family_names <- readRDS(file.path(family_names))
 our_names <- readRDS(here::here("data", "derived-data", "checklist_standardized.rds"))
 our_names <- our_names[!duplicated(our_names$our_accepted_scientificName), ]
 
+
 ##### Just to get some values... #####
 ##### TOTAL VALUES OF FAMILIES, GENUS, SPECIES THAT OCCUR IN NEOTROPICS #####
 ##### not necessarily endemics!!! #####
  fam_list <- list()
- cols <- c("tax.check1", "geo.check1", "origin.coord1", "cult.check", 
-           "country.new","dist.check", "out.check", "scientificName", "scientificNameAuthorship", 
-           "family",
-           "decimalLatitude.new1", "decimalLongitude.new1") #,
-           # Below are additions to work with plantR::checkList
-           # "catalogNumber", "collectionCode.new", "recordedBy.new", "recordNumber.new",
-           # "year.new", "stateProvince.new", "municipality.new", "loc.correct",
-           # "dup.ID", "dup.prop", "typeStatus", "numTombo", "month", "day")
- 
+ cols <- c("tax.check1", "geo.check1", "origin.coord1", "cult.check1", 
+           "country.new","dist.check", "out.check", "scientificName", "family",
+           "decimalLatitude.new1", "decimalLongitude.new1")
  for(i in family_names){
    cat("Loading", i, "to summarise here", "\n")
    gz_path <- file.path(file_path1, i, paste0(i, ".csv.gz"))
@@ -92,69 +74,64 @@ our_names <- our_names[!duplicated(our_names$our_accepted_scientificName), ]
    family_data$chisq.out.robust <- family_data$maha.robust > critVal
    fam_list[[i]] <- family_data
  }
+ fam_list <- dplyr::bind_rows(fam_list) # 66,412,445 non dup records
+ fam_list <- fam_list[fam_list$tax.check %in% "high", ] 
+ fam_list <- fam_list[grepl("^ok_|shore", fam_list$geo.check), ]
+ big_countries <- c("brazil", "colombia", "peru", "bolivia", 
+                    "venezuela", "argentina", "mexico", "chile") ##### add algo sobre esse corte #####
+ fam_list <- fam_list[!(fam_list$country.new %in% big_countries &
+                                grepl("^ok_country($|\\[|_)", fam_list$geo.check)), ]
+ fam_list <- fam_list[grepl("coord_gazet|coord_original",fam_list$origin.coord), ]
+ fam_list <- fam_list[!fam_list$cult.check %in% c("cultivated", "prob_cultivated"), ]
+ fam_list <- fam_list[(!fam_list$dist.check %in% "bad_dist" &
+                               !fam_list$chisq.out.robust %in% TRUE), ] # 1,819,151 records after all filters
+ # fam_list <- fam_list[!(is.na(fam_list$out.check) & 
+ #                          fam_list$dist.check %in% "bad_dist"), ]
  
- ##### ATÉ ACIMA ESTÁ TUDO BEM! #####
- ##### ABAIXO, MELHORAR E REVER #####
+ # Get life form classification from our list
+ fam_list <- dplyr::left_join(fam_list, our_names[, c("our_accepted_scientificName", 
+                                                       "lifeForm_aggregated")],
+                              by = c("scientificName" = "our_accepted_scientificName"))
+ fam_list$decimalLatitude.new <- as.numeric(fam_list$decimalLatitude.new)
+ fam_list$decimalLongitude.new <- as.numeric(fam_list$decimalLongitude.new)
+ fam_list <- terra::vect(fam_list, geom = c("decimalLongitude.new",
+                                            "decimalLatitude.new"),
+                         crs = "epsg:4326")
+ fam_list$is_nt <- terra::is.related(x = fam_list,
+                                     y = tropical_america,
+                                     "intersects")
  
- # fam_list <- dplyr::bind_rows(fam_list) # 66,412,445 non dup records
- # fam_list <- fam_list[fam_list$tax.check %in% "high", ] 
- # fam_list <- fam_list[grepl("^ok_|shore", fam_list$geo.check), ]
- # big_countries <- c("brazil", "colombia", "peru", "bolivia", 
- #                    "venezuela", "argentina", "mexico", "chile") ##### add algo sobre esse corte #####
- # fam_list <- fam_list[!(fam_list$country.new %in% big_countries &
- #                                grepl("^ok_country($|\\[|_)", fam_list$geo.check)), ]
- # fam_list <- fam_list[grepl("coord_gazet|coord_original",fam_list$origin.coord), ]
- # fam_list <- fam_list[!fam_list$cult.check %in% c("cultivated", "prob_cultivated"), ]
- # fam_list <- fam_list[(!fam_list$dist.check %in% "bad_dist" &
- #                               !fam_list$chisq.out.robust %in% TRUE), ] # 1,819,151 records after all filters
- # # fam_list <- fam_list[!(is.na(fam_list$out.check) & 
- # #                          fam_list$dist.check %in% "bad_dist"), ]
- # 
- # # Get life form classification from our list
- # fam_list <- dplyr::left_join(fam_list, our_names[, c("our_accepted_scientificName", 
- #                                                       "lifeForm_aggregated")],
- #                              by = c("scientificName" = "our_accepted_scientificName"))
- # fam_list$decimalLatitude.new <- as.numeric(fam_list$decimalLatitude.new)
- # fam_list$decimalLongitude.new <- as.numeric(fam_list$decimalLongitude.new)
- # fam_list <- terra::vect(fam_list, geom = c("decimalLongitude.new",
- #                                            "decimalLatitude.new"),
- #                         crs = "epsg:4326")
- # fam_list$is_nt <- terra::is.related(x = fam_list,
- #                                     y = tropical_america,
- #                                     "intersects")
- # 
- # ##### How many families? #####
- # length(unique(fam_list$family[fam_list$is_nt %in% TRUE & # 241 for shrubs
- #                                 grepl("tree", 
- #                                       fam_list$lifeForm_aggregated)])) # 216 families
- # # How many genus?
- # length(unique(sapply(strsplit(fam_list$scientificName[fam_list$is_nt %in% TRUE &
- #                                                         grepl("tree", 
- #                                                               fam_list$lifeForm_aggregated)], " "), 
- #                      function(x) x[1]))) # 2,088 genus # 2,855 for shrubs
- # 
- # # How many species?
- # length(unique(fam_list$scientificName[fam_list$is_nt %in% TRUE &  # 27,025 in Neotropics 42,558 for shrubs
- #                                         grepl("tree", 
- #                                               fam_list$lifeForm_aggregated)]))
- # 
- # 
- # 
- # fam_list$decimalLatitude.new <- as.numeric(fam_list$decimalLatitude.new)
- # fam_list$decimalLongitude.new <- as.numeric(fam_list$decimalLongitude.new)
- # fam_list <- terra::vect(fam_list, geom = c("decimalLongitude.new",
- #                                            "decimalLatitude.new"),
- #                         crs = "epsg:4326")
- # fam_list$is_nt <- terra::is.related(x = fam_list,
- #                                     y = tropical_america,
- #                                                   "intersects")
+ ##### How many families? #####
+ length(unique(fam_list$family[fam_list$is_nt %in% TRUE & # 241 for shrubs
+                                 grepl("tree|shrub", 
+                                       fam_list$lifeForm_aggregated)])) # 216 families
+ # How many genus?
+ length(unique(sapply(strsplit(fam_list$scientificName[fam_list$is_nt %in% TRUE &
+                                                         grepl("tree|shrub", 
+                                                               fam_list$lifeForm_aggregated)], " "), 
+                      function(x) x[1]))) # 2,088 genus # 2,855 for shrubs
+ 
+ # How many species?
+ length(unique(fam_list$scientificName[fam_list$is_nt %in% TRUE &  # 27,025 in Neotropics 42,558 for shrubs
+                                         grepl("tree|shrub", 
+                                               fam_list$lifeForm_aggregated)]))
+ 
+
+ 
+ fam_list$decimalLatitude.new <- as.numeric(fam_list$decimalLatitude.new)
+ fam_list$decimalLongitude.new <- as.numeric(fam_list$decimalLongitude.new)
+ fam_list <- terra::vect(fam_list, geom = c("decimalLongitude.new",
+                                            "decimalLatitude.new"),
+                         crs = "epsg:4326")
+ fam_list$is_nt <- terra::is.related(x = fam_list,
+                                     y = tropical_america,
+                                                   "intersects")
 
 #
 
 
 
 # Get a Realm/EFG for each occurrence -------------------------------------
-# And filter only good registers for weighted endemism --------------------
 
 # Do it by family
 for(i in family_names){
@@ -169,9 +146,13 @@ for(i in family_names){
   
   family_data <- data.table::fread(gz_path)
   
+  # family_data <- Lauraceae
+  family_data$ids <- 1:nrow(family_data)
+  
+  # REMOVING THIS STEP FOR NOW #
   ##### Keep only records validated by a taxonomists ($tax.check == 'high') #####
   # high_names <- unique(all_fam$scientificName[all_fam$tax.check %in% "high"])
-  family_data <- family_data[family_data$tax.check1 %in% c("high", "medium"), ]
+  # family_data <- family_data[family_data$tax.check %in% "high", ]
   
   # Get only "trees" lifeForm
   family_data <- dplyr::left_join(family_data, 
@@ -181,38 +162,15 @@ for(i in family_names){
   family_data <- family_data[grepl("tree", family_data$lifeForm_aggregated), ]
   
   ##### Removing unusable data #####
-  # Geo check: keep only ok_ and shore (this could be just some mapping issues)
+  # Geo check: keep only ok_ and MAYBE add SHORE?
   family_data <- family_data[grepl("^ok_|shore", family_data$geo.check1), ]
 
-  # Keep only records that are at the minimal administrative level each LatAm country
-  # have in our gazetteer. For cases where the minimum ADM level is below municipality,
-  # we keep everything at municipality (nothing above)
-  # Example: for Bahamas, our gazetteer only have information at ADM ("state"-level)
-  family_data <- dplyr::left_join(family_data, eq_table, by = c("country.new" = "country"))
-  family_data$to_use_geo <- FALSE
-  
-  # For ADM1: tag TRUE if geo.check1 starts with "ok_state", "ok_county", or "ok_locality"
-  family_data$to_use_geo[family_data$latamMap_GADM %in% "ADM1" & 
-                           grepl("^ok_state|^ok_county|^ok_locality", 
-                                 family_data$geo.check1,)] <- TRUE
-  
-  # For ADM2: tag TRUE if geo.check1 starts with "ok_county" or "ok_locality"
-  family_data$to_use_geo[family_data$latamMap_GADM %in% "ADM2" & 
-                           grepl("^ok_county|^ok_locality", 
-                                 family_data$geo.check1)] <- TRUE
-  
-  # For ADM3: tag TRUE if geo.check1 starts with "ok_county" or "ok_locality"
-  family_data$to_use_geo[family_data$latamMap_GADM %in% "ADM3" & 
-                           grepl("^ok_county|^ok_locality", 
-                                 family_data$geo.check1)] <- TRUE
-  
-  # For Uruguay specifically (they only have ADM 1): use ADM 1 or below
-  family_data$to_use_geo[family_data$country.new %in% "uruguay" & 
-                           grepl("^ok_state|^ok_county|^ok_locality", 
-                                 family_data$geo.check1)] <- TRUE
-  
-  # Remove falses
-  family_data <- family_data[family_data$to_use_geo %in% TRUE, ]
+  # Do not use ok_country if the coordinate came from a very big country due to
+  # the centroid being a fake indicative of efg
+  big_countries <- c("brazil", "colombia", "peru", "bolivia", 
+                     "venezuela", "argentina", "mexico", "chile")
+  family_data <- family_data[!(family_data$country.new %in% big_countries &
+                                 grepl("^ok_country($|\\[|_)", family_data$geo.check1)), ]
   
   # Coord check: keep only records with coordinates
   family_data <- family_data[grepl("coord_gazet|coord_original", family_data$origin.coord1), ]
@@ -221,8 +179,7 @@ for(i in family_names){
   family_data <- family_data[!family_data$cult.check %in% c("cultivated", "prob_cultivated"), ]
   
   # Outliers and distribution check: remove bad_dist and out.check is TRUE
-  # We only remove a register if it falls outside of its indicated botanical country
-  # <AND> is a spatial outlier
+  
   # Converting D² distances to probabilities using the Chi-square dist.
   # degrees of freedom == 2 since we have two-dimensions (lon/lat)
   df <- 2
@@ -248,13 +205,13 @@ for(i in family_names){
   # Convert to SpatVect
   family_data_coord_orig <- terra::vect(family_data[with_coord_orig, ],
                                    geom = c("decimalLongitude.new1",
-                                            "decimalLatitude.new1"),
-                                   crs = "epsg:4326")
+                                            "decimalLatitude.new1"))
+  terra::crs(family_data_coord_orig) <- "epsg:4326"
   
   # Cross with Neotropical map and EFG map
   # Neotropical
   # Need to use a buffer to get points close to the border due to mismatch
-  # between gazetteer coordinates and maps (brazil_para_belem falls in water)
+  # between gazetteer coordinates and maps (brazil_para_belem falls water)
   family_data_coord_orig$is_nt <- terra::is.related(x = family_data_coord_orig,
                                                     y = tropical_america,
                                                     "intersects")
@@ -288,46 +245,18 @@ for(i in family_names){
   # Now, simply merge coord_gazet with latamMap info
   with_coord_gazet <- which(family_data$origin.coord1 %in% "coord_gazet")
   result_df_gazet <- dplyr::left_join(x = family_data[with_coord_gazet, ],
-                                      y = gaz_efg[, c("loc.correc", "our_efg")],
-                                      by = c("loc.correct1" = "loc.correc"))
-  result_df_gazet <- result_df_gazet[!duplicated(result_df_gazet$ids), ]
-  # The same for Neotropics
-  result_df_gazet <- dplyr::left_join(result_df_gazet,
-                                      gaz_nt[, c("loc.correc", "is_nt")],
-                                      by = c("loc.correct1" = "loc.correc"))
-  result_df_gazet <- result_df_gazet[!duplicated(result_df_gazet$ids), ]
+                                      y = latam_gaz[, c("loc_gaz", "our_efg_new")],
+                                      by = c("loc.correct" = "loc_gaz"))
+  names(result_df_gazet)[which(names(result_df_gazet) == "our_efg_new")] <- "our_efg"
   
   # Merge back with original data:
-  to_merge <- rbind.data.frame(result_df_orig[, c("ids", "our_efg", "is_nt")],
-                               result_df_gazet[, c("ids", "our_efg", "is_nt")])
+  to_merge <- rbind.data.frame(result_df_orig[, c("ids", "our_efg")],
+                               result_df_gazet[, c("ids", "our_efg")])
+  # Get the is_nt column from family_data_coord_orig
+  to_merge <- dplyr::left_join(to_merge, family_data_coord_orig_df[, c("ids", "is_nt")],
+                               by = "ids")
   family_data <- dplyr::left_join(family_data, to_merge, by = "ids")
   
-  ##### RELEVANT: cases where we have a shapefile, we can assign an area for
-  # each adm level and consider transition/predominant regarding Neotropics and
-  # each biome
-  #####
-  # Is the realm transitional or predominant?
-  # Transitional?
-  latam_gaz_trans <- latam_gaz[grepl("^Transition", latam_gaz$Morrone_re_new), ]
-  get_these <- which(family_data$loc.correct1 %in% latam_gaz_trans$loc_gaz)
-  family_data$is_realm_transitional <- FALSE
-  family_data$is_realm_transitional[get_these] <- TRUE
-  # Predominant?
-  latam_gaz_pred <- latam_gaz[grepl("predominant$", latam_gaz$Morrone_re_new), ]
-  get_these <- which(family_data$loc.correct1 %in% latam_gaz_pred$loc_gaz)
-  family_data$is_realm_predominant <- FALSE
-  family_data$is_realm_predominant[get_these] <- TRUE
-  
-  ##### Doing the same for biomes #####
-  latam_gaz_trans <- latam_gaz[grepl("^Transition", latam_gaz$our_efg_new), ]
-  get_these <- which(family_data$loc.correct1 %in% latam_gaz_trans$loc_gaz)
-  family_data$is_biome_transitional <- FALSE
-  family_data$is_biome_transitional[get_these] <- TRUE
-  # Predominant?
-  latam_gaz_trans <- latam_gaz[grepl("predominant$", latam_gaz$our_efg_new), ]
-  get_these <- which(family_data$loc.correct1 %in% latam_gaz_trans$loc_gaz)
-  family_data$is_biome_predominant <- FALSE
-  family_data$is_biome_predominant[get_these] <- TRUE
   
   ##### For still NA cases, get the info from gazetteer objects #####
   which_na <- which(is.na(family_data$our_efg))
@@ -374,7 +303,7 @@ for(i in family_names){
   }
   
   # Drop ids column and save
-  # family_data$ids <- NULL
+  family_data$ids <- NULL
   
   # Saving by family 
   plantR::saveData(family_data,
