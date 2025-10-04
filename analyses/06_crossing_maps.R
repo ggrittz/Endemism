@@ -7,11 +7,11 @@ latamMap <- dplyr::bind_rows(latamMap)
 latamMap <- terra::vect(latamMap)
 # To compare later
 latamMap$NAME_all <- paste(latamMap$NAME_0,
-                            latamMap$NAME_1,
-                            latamMap$NAME_2,
-                            latamMap$NAME_3,
-                            1:dim(latamMap)[1],
-                            sep = "_")
+                           latamMap$NAME_1,
+                           latamMap$NAME_2,
+                           latamMap$NAME_3,
+                           1:dim(latamMap)[1],
+                           sep = "_")
 
 # Do the same for the gazetteers
 gaz <- plantR:::gazetteer
