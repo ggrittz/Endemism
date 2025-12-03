@@ -216,14 +216,18 @@ for(i in family_names){
                                   keep.values = TRUE)
     
     # Validating records that are falling outside of the species' indicated botanical country
-    gbif_data <- plantR::checkDist(x = gbif_data,
+    gbif_data <- my_checkDist(x = gbif_data,
                                    tax.name = "taxonName",
                                    tax.author = "taxonAuthor",
                                    loc = "loc.correct",
                                    source = "wcvp")
     
     # Validating confidence level of species determinators
-    gbif_data <- plantR::validateTax(gbif_data, generalist = TRUE, print = FALSE)
+    gbif_data <- plantR::validateTax(gbif_data, kingdom = "plantae", 
+                                     generalist = FALSE, print = FALSE)
+    
+    # Considering low complexity ID as "high"
+    ###### Gotta add this in the next version #####
     
     # Saving by collection and separating by family 
     plantR::saveData(gbif_data,

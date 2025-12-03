@@ -167,14 +167,28 @@ for(i in family_names){
                                    keep.values = TRUE)
   
   # Validating records that are falling outside of the species' indicated botanical country
-  reflora_data1 <- plantR::checkDist(x = reflora_data1,
+  reflora_data1 <-my_checkDist(x = reflora_data1,
                                    tax.name = "taxonName",
                                    tax.author = "taxonAuthor",
                                    loc = "loc.correct",
                                    source = "wcvp")
   
   # Validating confidence level of species determinators
-  reflora_data1 <- plantR::validateTax(reflora_data1, generalist = TRUE, print = FALSE)
+  # Error in col["order"] : 
+  #  objeto de tipo 'closure' não possível dividir em subconjuntos
+  reflora_data1 <- plantR::validateTax(reflora_data1, 
+                                       col.names = c(# class = "class", 
+                                                     # order = "order", # issue here send Renato
+                                                     family = "family.new", 
+                                                     det.name = "identifiedBy.new", 
+                                                     col.name = "recordedBy.new", 
+                                                     types = "typeStatus", 
+                                                     rec.ID = "numTombo", 
+                                                     rec.type = "basisOfRecord"),
+                                       generalist = TRUE, print = FALSE)
+  
+  # Considering low complexity ID as "high"
+  ###### Gotta add this in the next version #####
   
   # Saving by collection and separating by family
   plantR::saveData(reflora_data1,

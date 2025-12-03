@@ -216,14 +216,19 @@ for(i in family_names){
                                    keep.values = TRUE)
   
   # Validating records that are falling outside of the species' indicated botanical country
-  jabot_data1 <- plantR::checkDist(x = jabot_data1,
+  jabot_data1 <- my_checkDist(x = jabot_data1,
                                    tax.name = "taxonName",
                                    tax.author = "taxonAuthor",
                                    loc = "loc.correct",
                                    source = "wcvp")
   
   # Validating confidence level of species determinators
-  jabot_data1 <- plantR::validateTax(jabot_data1, , generalist = TRUE, print = FALSE)
+  jabot_data1 <- plantR::validateTax(jabot_data1, kingdom = "plantae", 
+                                   generalist = FALSE, print = FALSE)
+  
+  # Considering low complexity ID as "high"
+  ###### Gotta add this in the next version #####
+  
   
   # Saving by collection and separating by family
   plantR::saveData(jabot_data1,

@@ -256,14 +256,19 @@ for(i in family_names){
                                    keep.values = TRUE)
 
   # Validating records that are falling outside of the species' indicated botanical country
-  splink_data <- plantR::checkDist(x = splink_data,
+  splink_data <- my_checkDist(x = splink_data,
                                    tax.name = "taxonName",
                                    tax.author = "taxonAuthor",
                                    loc = "loc.correct",
                                    source = "wcvp")
   
   # Validating confidence level of species determinators
-  splink_data <- plantR::validateTax(splink_data, generalist = TRUE, print = FALSE)
+  splink_data <- plantR::validateTax(splink_data, 
+                                     kingdom = "plantae",
+                                     generalist = TRUE, print = FALSE)
+  
+  # Considering low complexity ID as "high"
+  ###### Gotta add this in the next version #####
   
   # Saving by collection and separating by family
   plantR::saveData(splink_data,

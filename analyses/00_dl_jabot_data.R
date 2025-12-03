@@ -1,4 +1,4 @@
-# Download REFLORA data ---------------------------------------------------
+# Download JABOT data -----------------------------------------------------
 
 # https://ipt.jbrj.gov.br/jabot/resource?r= is the base url.
 
