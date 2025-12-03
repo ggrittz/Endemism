@@ -69,6 +69,12 @@ level_all1$taxon.distribution.bru <- gsub("^brazilia distrito federal$",
 level_all1$taxon.distribution.bc <- plantR::prepCountry(level_all1$taxon.distribution.bc)
 level_all1$taxon.distribution.bru <- plantR::prepCountry(level_all1$taxon.distribution.bru)
 
+# Dealing with India NA cases due to countrycode routine
+get_these <- which(level_all1$taxon.distribution.bru.code %in% "IND-DI")
+level_all1$taxon.distribution.bru[get_these] <- "diu"
+get_these <- which(level_all1$taxon.distribution.bru.code %in% "IND-GO")
+level_all1$taxon.distribution.bru[get_these] <- "goa"
+
 # Add this to Sys.Data!
 file_name3 <- "wcvp_lookupDist.rds"
 saveRDS(level_all1, file.path(file_path, file_name3))
