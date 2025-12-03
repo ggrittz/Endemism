@@ -464,8 +464,9 @@ weighted.endemism <- function(species_records,
                   )
                 } #cls if(class(spp...
                 if (class(spp_i_range_polygon)[1] != "try-error") {
-                  plot(spp_i_range_polygon, main = paste(polygon_area))
+                  ##### Changed the position of both lines below #####
                   polygon_area <- try(areaPolygon(as.data.frame(spp_i_range_polygon[, 2:3])))
+                  plot(spp_i_range_polygon, main = paste(polygon_area))
                   if (class(polygon_area) != "numeric") {
                     v[i] <- cell_size
                     warning(
@@ -606,8 +607,9 @@ weighted.endemism <- function(species_records,
                   )
                 } #cls if(class(spp...
                 if (class(spp_i_range_polygon)[1] != "try-error") {
-                  plot(spp_i_range_polygon, main = paste(polygon_area))
+                  ##### Changed the position of both lines below #####
                   polygon_area <- try(areaPolygon(as.data.frame(spp_i_range_polygon[, 2:3])))
+                  plot(spp_i_range_polygon, main = paste(polygon_area))
                   if (class(polygon_area) == "try-error") {
                     v[n] <- cell_size
                     warning(
