@@ -12,13 +12,15 @@
 #' @date 2025/10/13
 #' 
 # Load and preparing the species list -----------------------------------------------------------------
-file_path <- here::here("data", "derived-data", "rds")
-check_file <- list.files(file_path, pattern = "checklist", full.names = TRUE)
-check <- readRDS(check_file)
-
+file_path <- here::here("data", "derived-data")
+check_file <- list.files(file_path, pattern = "nt_species", full.names = TRUE)
+# check <- readRDS(check_file)
+check <- as.data.frame(readRDS(check_file))
+names(check) <- "scientificName"
 # isolating taxon and author names for name matching
 sci_name <- "scientificName"
-tmp <- plantR::fixAuthors(check[[sci_name]])
+# tmp <- plantR::fixAuthors(check[[sci_name]])
+tmp <- plantR::fixAuthors(check$scientificName)
 names(tmp) <- c(sci_name, "scientificName.new", "scientificNameAuthorship.new")
 check <- dplyr::left_join(check, tmp, by = sci_name)
 # name matching to get the WCVP ID using plantR
@@ -127,6 +129,7 @@ dados.anos = merge (as.data.frame(anos), species,
                     by.x="anos", by.y="Group.1", all=TRUE)
 dados.anos[is.na(dados.anos)] <- 0
 dados.anos <- dados.anos[-length(dados.anos[[1]]),] # removing last year studies (many species are probably not published yet)
+# dados.anos <- dados.anos[dados.anos$anos >= 1760, ] # avoiding Species Plantarum biased influence
 
 fut.year <- 250 # The choice of the final year of projection matters
 dados.anos1 <- dados.anos
@@ -379,10 +382,10 @@ conf95 <- confint(best1)
 pico <- paste0(round(stats::coef(best1)[2], 0), " tree species [95% CI: ", 
                round(conf95[2,1], 0), "-", 
                round(conf95[2,2], 0), "]")
-ano.pico <- paste0(seq(1753, 1753+1000, 1)[round(stats::coef(best1)[1], 0)], " [95% CI: ",
-                   seq(1753, 1753+1000, 1)[round(conf95[1,1], 0)], "-", 
-                   seq(1753, 1753+1000, 1)[round(conf95[1,2], 0)], "]")
 toto <- range(check$first_published.new, na.rm = TRUE) # species described between 1753 and 2023
+ano.pico <- paste0(seq(toto[1], toto[1]+1000, 1)[round(stats::coef(best1)[1], 0)], " [95% CI: ",
+                   seq(toto[1], toto[1]+1000, 1)[round(conf95[1,1], 0)], "-", 
+                   seq(toto[1], toto[1]+1000, 1)[round(conf95[1,2], 0)], "]")
 check[check$first_published %in% toto[1], ]
 desc <- paste0("The earliest species in our study area were described in ", toto[1],". The rate of species described each year increased until the early 20s of the last century, when the rate started to decrease. \n", sep="")
 write(desc, file=file.out, append=TRUE)
