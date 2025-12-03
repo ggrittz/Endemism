@@ -26,23 +26,26 @@ int_map <- terra::rast(file.path(file_path2, file4))
 # biomes...
 all_files <- list.files(file_path2, full.names = TRUE)
 biome_files <- all_files[grepl("_biomes_", all_files)]
+# biome_files <- biome_files[2:6]
 biome_names <- gsub("^.*_([^_]+)\\.tiff$", "\\1", basename(biome_files))
+# biome_names <- biome_names[2:6]
 int_map_biomes <- vector("list", length(biome_files))
 for (i in seq_along(biome_files)) {
   int_map_biomes[[i]] <- terra::rast(biome_files[i])
 }
 names(int_map_biomes) <- biome_names
-int_map_biomes$Intertidal.forests.and.shrublands <- NULL
 
 # null_model <- readRDS(file.path(file_path1, file8))
-scatt <- read.csv(file.path(file_path3, file9))
+# scatt <- read.csv(file.path(file_path3, file9))
 my_df <- readRDS(file.path(file_path1, file5)) 
 my_df1 <- my_df[, c("decimalLongitude.new", "decimalLatitude.new")]
+my_df1$decimalLongitude.new <- as.numeric(my_df1$decimalLongitude.new)
+my_df1$decimalLatitude.new <- as.numeric(my_df1$decimalLatitude.new)
 my_df1 <- terra::vect(my_df1, 
                       geom = c("decimalLongitude.new",
                                "decimalLatitude.new"),
                       crs = "epsg:4326")
-our_names <- readRDS(file.path(file_path0, file7))
+# our_names <- readRDS(file.path(file_path0, file7))
 # a <- our_names[grepl("herb", our_names$lifeForm_aggregated),]
 
 # Shapefiles...
@@ -64,7 +67,7 @@ cores <- MetroBrewer::metro.brewer("Beijing",
 names(cores) <- tropical_america$our_efg
 tropical_america$our_efg <- factor(tropical_america$our_efg, levels = names(cores))
 
-svg("figures/StudyArea.svg", width = 10, height = 10)
+svg("figures/FigureS1.svg", width = 10, height = 10)
 # Main plot of Neotropics
 terra::plot(tropical_america, 
             col = cores[tropical_america$our_efg],
@@ -100,6 +103,9 @@ dev.off()
 
 # Calculate density map for observations ----------------------------------
 dens <- terra::rasterize(x = my_df1, y = wee_map, fun = "sum")
+##### Fix this on the code in the next version! #####
+##### Aka, do mask off these registers from the final_df #####
+dens <- terra::mask(dens, tropical_america_diss)
 quantile_vals <- terra::global(dens, quantile, probs = seq(0, 1, 0.05), na.rm = TRUE)
 breaks <- as.numeric(quantile_vals)
 labels <- names(quantile_vals)
@@ -238,31 +244,34 @@ dev.off()
 # Top 90% WE values inside each biome (area) ------------------------------
 intersected <- terra::intersect(th_we_bin[th_we_bin$krig.we == 1, ], 
                                 tropical_america)
+
 # Area
 intersected$top90_area_m2 <- terra::expanse(intersected)
 intersected$top90_area_km2 <- intersected$top90_area_m2 / 1e6
 # Aggregate the results by our_efg
 result <- terra::aggregate(top90_area_km2 ~ our_efg, data = as.data.frame(intersected), FUN = sum)
-
-# Get the info into the summary_table
-scatt <- dplyr::left_join(scatt, result, by = c("EFG" = "our_efg"))
-scatt$prop_top90_area_km2 <- 100 * (scatt$top90_area_km2 / scatt$EFG_area_km)
-write.csv(scatt, file.path(file_path3, file9))
+intersected_df <- terra::as.data.frame(intersected)
+intersected_df$prop_top90_area_km2 <- 100 * (intersected_df$top90_area_km2/intersected_df$er_Area_km)
+keep_these <- c("our_efg", "Morrone_re", "er_Area_ha", "er_Area_km",
+                "top90_area_m2", "top90_area_km2", "prop_top90_area_km2")
+intersected_df <- intersected_df[, keep_these]
+# Prepare and save this table
+write.csv(intersected_df, file.path(file_path3, file9))
 
 
 
 # Making one plot for each biome here -------------------------------------
 # Fix the layout matrix for 5 plots
-my_layout <- matrix(c(1, 2, 3, 2, 4, 5),  # 0 for empty cell
-                    nrow = 3, ncol = 2, byrow = TRUE)
-layout(my_layout, 
-       widths = c(0.5, 0.5),
-       heights = c(0.333, 0.333, 0.333))
-layout.show(5)  
-
-my_order <- c(4, 5, 3, 1, 2)
-my_order_biome_names <- biome_names[2:6]
-my_order_biome_names <- my_order_biome_names[my_order]
+# my_layout <- matrix(c(1, 2, 3, 2, 4, 5),  # 0 for empty cell
+#                     nrow = 3, ncol = 2, byrow = TRUE)
+# layout(my_layout, 
+#        widths = c(0.5, 0.5),
+#        heights = c(0.333, 0.333, 0.333))
+# layout.show(5)  
+# 
+# my_order <- c(3, 2, 1, 1, 2)
+my_order_biome_names <- biome_names
+# my_order_biome_names <- my_order_biome_names[my_order]
 
 for(i in seq_along(my_order_biome_names)){
   svg(paste0(here::here("figures"), "/", "FigureS3_", 

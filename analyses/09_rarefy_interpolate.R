@@ -3,13 +3,14 @@
 
 final_df <- readRDS(here::here("data", "derived-data", "rds",
                                "final_df.rds"))
+final_df$decimalLatitude.new1 <- as.numeric(final_df$decimalLatitude.new1)
+final_df$decimalLongitude.new1 <- as.numeric(final_df$decimalLongitude.new1)
 we_map_area <- readRDS(here::here("data", "derived-data", "rds",
                                   "we_map_area_50km.rds"))
 we_map_area_biomes <- readRDS(here::here("data", "derived-data", "rds",
                                          "we_map_area_biomes_50km.rds"))
 efg_end <- readRDS(here::here("data", "derived-data", "rds", "end_per_efg.rds"))
-efg_end <- efg_end[!grepl("Transition|predominant", names(efg_end))]
-# only 15 remanining: three have no endemics and one have no records
+efg_end <- efg_end[names(efg_end) %in% names(we_map_area_biomes)]
 efg_names <- names(efg_end)
 
 # Study area
@@ -33,9 +34,10 @@ my_we_raster_biomes <- lapply(we_map_area_biomes,
                               })
 
 # Convert occ points to spatial points
-final_df1 <- terra::vect(final_df, 
-                         geom = c("decimalLongitude.new",
-                                  "decimalLatitude.new"), 
+final_df1 <- terra::vect(final_df[final_df$is_realm_predominant %in% FALSE 
+                                  & final_df$is_realm_transitional %in% FALSE, ], 
+                         geom = c("decimalLongitude.new1",
+                                  "decimalLatitude.new1"), 
                          crs = "epsg:4326")
 
 # Get cell numbers for all points
@@ -335,7 +337,7 @@ names(my_we_raster_biomes1)[which(names(my_we_raster_biomes1) == "our_efg")] <- 
 ##### Using sample coverage and N cut-offs following Lima et al. 2020 #####
 
 # Get the quantiles for SC
-sc_quantiles <- quantile(my_we_raster1$SC, probs = c(0.25, 0.50, 0.75))
+sc_quantiles <- quantile(my_we_raster1$SC, probs = c(0.25, 0.50, 0.75), na.rm = TRUE)
 
 # Condition 1: between 25 and 50 quantiles of sc and more than 75 occ. (were 100)
 cond1 <- my_we_raster1$SC >= sc_quantiles["25%"] & 
@@ -356,40 +358,6 @@ cond3 <- my_we_raster1$SC >= sc_quantiles["75%"] &
 my_we_raster1$use_this <- cond1 | cond2 | cond3
 # Changing one name
 names(my_we_raster1)[which(names(my_we_raster1) == "our_efg")] <- "we"
-
-
-##### Finding rarefaction values for the top 3 biomes in sampling effort #####
-# get_these_lowland <- which(grepl("lowland", my_we_raster_biomes1$biome))
-# sc_quantiles_lowland <- quantile(my_we_raster_biomes1$SC[get_these_lowland], 
-#                                  probs = c(0.25, 0.50, 0.75))
-# 
-# get_these_montane <- which(grepl("montane", my_we_raster_biomes1$biome))
-# sc_quantiles_montane <- quantile(my_we_raster_biomes1$SC[get_these_montane], 
-#                                  probs = c(0.25, 0.50, 0.75))
-# 
-# get_these_dry <- which(grepl("thickets", my_we_raster_biomes1$biome))
-# sc_quantiles_dry <- quantile(my_we_raster_biomes1$SC[get_these_dry], 
-#                                  probs = c(0.25, 0.50, 0.75))
-# 
-# # Conditions for each one of them separately
-# # Condition 1: between 25 and 50 quantiles of sc and more than 75 occ. (were 100)
-# cond1_lowland <- my_we_raster_biomes1$SC[get_these_lowland] >= sc_quantiles_lowland["25%"] & 
-#   my_we_raster_biomes1$SC[get_these_lowland] <= sc_quantiles_lowland["50%"] & 
-#   my_we_raster_biomes1$n[get_these_lowland] >= 75 # 100 ou inverter 25
-# 
-# # Condition 2: between 50 and 75 quantiles of sc and more than 35 occ. (were 50)
-# cond2_lowland <- my_we_raster_biomes1$SC[get_these_lowland] >= sc_quantiles_lowland["50%"] & 
-#   my_we_raster_biomes1$SC[get_these_lowland] <= sc_quantiles_lowland["75%"] & 
-#   my_we_raster_biomes1$n[get_these_lowland] >= 35 # 75 / 50
-# 
-# # Condition 3: more than 75 quantiles of sc and more than 30 occ.
-# cond3_lowland <- my_we_raster_biomes1$SC[get_these_lowland] >= sc_quantiles_lowland["75%"] & 
-#   my_we_raster_biomes1$n[get_these_lowland] >= 30 # 50 / 75
-# 
-# 
-# # We are using 37% of cells to interpolate in all tropical America
-# my_we_raster_biomes2$use_this <- NA
-# my_we_raster_biomes2$use_this[get_these_lowland] <- cond1_lowland | cond2_lowland | cond3_lowland
 
 
 ##### I am not rarefying biomes separately... #####
@@ -419,7 +387,7 @@ krig_mod <- gstat::gstat(id = "we",
                          formula = log(we) ~ 1, # Interpolating log-transformed values
                          locations = ~x+y,
                          data = my_we_raster1[my_we_raster1$use_this %in% TRUE, ],
-                         model = gstat::vgm(model = "Ste", # find a better way to write this down
+                         model = gstat::vgm(model = as.character(vario$model)[2],
                                             psill = vario[2, 2],
                                             range = vario[2, 3],
                                             kappa = vario[2, 4]),
@@ -439,7 +407,7 @@ krig_mod <- gstat::gstat(id = "S.obs",
                          formula = log(S.obs) ~ 1, # Interpolating log-transformed values
                          locations = ~x+y,
                          data = my_we_raster1[my_we_raster1$use_this %in% TRUE, ],
-                         model = gstat::vgm(model = "Ste", # find a better way to write this down
+                         model = gstat::vgm(model = as.character(vario$model)[2],
                                             psill = vario[2, 2],
                                             range = vario[2, 3],
                                             kappa = vario[2, 4]),
@@ -459,7 +427,7 @@ krig_mod <- gstat::gstat(id = "Simp.obs",
                          formula = log(Simp.obs) ~ 1, # Interpolating log-transformed values
                          locations = ~x+y,
                          data = my_we_raster1[my_we_raster1$use_this %in% TRUE, ],
-                         model = gstat::vgm(model = "Ste", # find a better way to write this down
+                         model = gstat::vgm(model = as.character(vario$model)[2],
                                             psill = vario[2, 2],
                                             range = vario[2, 3],
                                             kappa = vario[2, 4]),
@@ -478,9 +446,6 @@ my_int <- terra::mask(my_int, tropical_america)
 terra::writeRaster(my_int, here::here("data", "derived-data", 
                                       "maps", "interpolated_maps1km.tiff"),
                    overwrite = TRUE)
-
-
-
 
 ##############################################################
 ##############################################################
@@ -535,7 +500,8 @@ filenames <- paste0("interpolated_maps_biomes_1km_",
 
 for (i in seq_along(my_we_grid_biomes)) {
   terra::writeRaster(my_we_grid_biomes[[i]], 
-                     here::here("data", "derived-data", "maps", filenames[i]))
+                     here::here("data", "derived-data", "maps", filenames[i]),
+                     overwrite = TRUE)
 }
 
 # Some metrics and plots --------------------------------------------------

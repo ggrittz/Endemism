@@ -5,18 +5,46 @@
 latamMap <- plantR::latamMap
 latamMap <- dplyr::bind_rows(latamMap)
 latamMap <- terra::vect(latamMap)
-# To compare later
-latamMap$NAME_all <- paste(latamMap$NAME_0,
-                           latamMap$NAME_1,
-                           latamMap$NAME_2,
-                           latamMap$NAME_3,
-                           1:dim(latamMap)[1],
-                           sep = "_")
+latamMap$is_orig <- TRUE
+# Crea the country and state levels at the latamMap by aggregating municipalities
+# Country
+latamMap_agg_country <- terra::aggregate(latamMap, by = "NAME_0", 
+                                         cores = 10, count = FALSE)
+latamMap_agg_country <- terra::fillHoles(latamMap_agg_country)
+# State
+latamMap_agg_state <- terra::aggregate(latamMap, by = c("NAME_0", "NAME_1"), 
+                                       cores = 10, count = FALSE)
+latamMap_agg_state <- terra::fillHoles(latamMap_agg_state)
+
+# These are not orig
+latamMap_agg_state$is_orig <- FALSE
+latamMap_agg_country$is_orig <- FALSE
+
+# Bind these with the latamMap
+latamMap <- rbind(latamMap, latamMap_agg_state, latamMap_agg_country)
+
+# Global name
+latamMap$NAME_all <- apply(terra::values(latamMap)
+                           [, c("NAME_0", "NAME_1", "NAME_2", "NAME_3", "NAME_4")], 1, 
+                           function(x) paste(na.omit(x), collapse = "_"))
+
+# Steps below are needed since adding _agg_state and _agg_country may duplicate 
+# some adm levels; and I wanna keep the originals, whenever possible
+latamMap_df <- terra::values(latamMap)
+# Order by is_orig (TRUE first) and remove duplicates
+latamMap_df_ordered <- latamMap_df[order(latamMap_df$is_orig, decreasing = TRUE), ]
+rows_to_keep <- !duplicated(latamMap_df_ordered$NAME_all)
+# Row indices from the df above
+keep_indices <- as.numeric(rownames(latamMap_df_ordered[rows_to_keep, ]))
+
+# Subset
+latamMap <- latamMap[keep_indices, ]
 
 # Do the same for the gazetteers
 gaz <- plantR:::gazetteer
 gaz <- terra::vect(gaz, geom = c("longitude.gazetteer", "latitude.gazetteer"),
                    crs = "epsg:4326")
+
 
 # ##### Already worked with #####
 # nt_dis <- terra::vect(here::here("data", "derived-data", "maps", "NTAmericas_dissolved.shp"))
@@ -29,20 +57,20 @@ gaz <- terra::vect(gaz, geom = c("longitude.gazetteer", "latitude.gazetteer"),
 # # Intersect against the Palearctic+Neotropical+Andean map
 # latamMap_nt <- terra::intersect(latamMap, nt_dis)
 # latamMap_nt$Morrone_re <- gsub("Neotropical_temperate", "Neotropical temperate",
-#                            latamMap_nt$Morrone_re)
+#                         latamMap_nt$Morrone_re)
 # # Do the same for gaz
 # gaz_nt <- terra::intersect(gaz, nt_dis)
 # gaz_nt$Morrone_re <- gsub("Neotropical_temperate", "Neotropical temperate",
-#                          gaz_nt$Morrone_re)
+#                       gaz_nt$Morrone_re)
 # 
 # # Intersect against the EFGs
 # latamMap_efg <- terra::intersect(latamMap, nt_efg)
 # latamMap_efg$Morrone_re <- gsub("Neotropical_temperate", "Neotropical temperate",
-#                             latamMap_efg$Morrone_re)
+#                          latamMap_efg$Morrone_re)
 # # Do the same for gaz
 # gaz_efg <- terra::intersect(gaz, nt_efg)
 # gaz_efg$Morrone_re <- gsub("Neotropical_temperate", "Neotropical temperate",
-#                           gaz_efg$Morrone_re)
+#                        gaz_efg$Morrone_re)
 # 
 # # Save these maps since it takes some time to run this intersection
 # file_path <- here::here("data", "derived-data", "maps")
@@ -55,10 +83,7 @@ gaz <- terra::vect(gaz, geom = c("longitude.gazetteer", "latitude.gazetteer"),
 # terra::writeVector(gaz_nt, file.path(file_path, file_name2), overwrite = TRUE)
 # terra::writeVector(gaz_efg, file.path(file_path, file_name3), overwrite = TRUE)
 
-
-
-
-# Read here the maps saved above
+##### Read here the maps saved above #####
 file_path <- here::here("data", "derived-data", "maps")
 file_name1 <- "latamMap_intersected_efg.shp"
 file_name <- "latamMap_intersected_nt.shp"
@@ -86,7 +111,7 @@ dups <- latamMap_nt[duplicated(latamMap_nt$NAME_all) |
 # Calculate the area inside each realm and merge it back
 dups$realmArea_km2 <- terra::expanse(dups, unit = "km")
 dups1 <- terra::as.data.frame(dups)
-dups1_agg <- aggregate(realmArea_km2 ~ Morrone_re + NAME_all, data = dups, sum)
+dups1_agg <- aggregate(realmArea_km2 ~ Morrone_re + NAME_all, data = dups1, sum)
 total_per_name <- aggregate(realmArea_km2 ~ NAME_all, data = dups1_agg, sum)
 names(total_per_name)[which(names(total_per_name) == "realmArea_km2")] <- "totalArea_km2"
 dups1_agg <- dplyr::left_join(dups1_agg, total_per_name, 
@@ -169,7 +194,7 @@ latamMap_nt2 <- latamMap_nt2[, -which(names(latamMap_nt2) == "Morrone_re")]
 # Merge with latamMap
 latamMap <- terra::as.data.frame(latamMap, geom = "WKT")
 latamMap <- dplyr::left_join(latamMap, 
-                             latamMap_nt2[, 5:length(latamMap_nt2)],
+                             latamMap_nt2[, 7:length(latamMap_nt2)],
                              by = "NAME_all")
 
 # Get localities not found in Morrone map
@@ -186,8 +211,6 @@ get_these <- is.na(latamMap$gaz_realmArea_km2)
 latamMap$gaz_realmArea_km2[get_these] <- terra::expanse(latamMap[get_these, ], "km")
 # These are also 100% neotropical localities, so percentage == 100%
 latamMap$Neotropical_realmPercentage[get_these] <- 1
-
-
 
 
 # Crossing EFG maps now ---------------------------------------------------
@@ -207,7 +230,7 @@ dups <- latamMap_efg[duplicated(latamMap_efg$NAME_all) |
 # Calculate the area inside each realm and merge it back
 dups$efgArea_km2 <- terra::expanse(dups, unit = "km")
 dups1 <- terra::as.data.frame(dups)
-dups1_agg <- aggregate(efgArea_km2 ~ our_efg + NAME_all, data = dups, sum)
+dups1_agg <- aggregate(efgArea_km2 ~ our_efg + NAME_all, data = dups1, sum)
 total_per_name <- aggregate(efgArea_km2 ~ NAME_all, data = dups1_agg, sum)
 names(total_per_name)[which(names(total_per_name) == "efgArea_km2")] <- "efg_totalArea_km2"
 dups1_agg <- dplyr::left_join(dups1_agg, total_per_name, 
@@ -265,7 +288,7 @@ for(i in 1:nrow(dups1_agg_wide)) {
     transition_realms <- gsub("_efgPercentage$", "", 
                               names(percentages)[percentages >= 0.1])
     dups1_agg_wide$our_efg_new[i] <- paste("Transition",
-                                           paste(sort(transition_realms), collapse = "|"))
+                                           paste(sort(transition_realms), collapse = " AND "))
   }
 }
 
@@ -290,7 +313,7 @@ latamMap_efg2 <- latamMap_efg2[, -which(names(latamMap_efg2) == "our_efg")]
 # Merge with latamMap
 latamMap <- terra::as.data.frame(latamMap, geom = "WKT")
 latamMap <- dplyr::left_join(latamMap, 
-                             latamMap_efg2[, c(5, 12:length(latamMap_efg2))],
+                             latamMap_efg2[, c(7, 13:length(latamMap_efg2))],
                              by = "NAME_all")
 
 # Get localities not found in Morrone map
