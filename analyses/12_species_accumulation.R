@@ -13,7 +13,8 @@
 #' 
 # Load and preparing the species list -----------------------------------------------------------------
 file_path <- here::here("data", "derived-data")
-check_file <- list.files(file_path, pattern = "nt_species", full.names = TRUE)
+check_file <- list.files(file_path, pattern = "nt_species", 
+                         full.names = TRUE)
 # check <- readRDS(check_file)
 check <- as.data.frame(readRDS(check_file))
 names(check) <- "scientificName"
@@ -21,7 +22,8 @@ names(check) <- "scientificName"
 sci_name <- "scientificName"
 # tmp <- plantR::fixAuthors(check[[sci_name]])
 tmp <- plantR::fixAuthors(check$scientificName)
-names(tmp) <- c(sci_name, "scientificName.new", "scientificNameAuthorship.new")
+names(tmp) <- c(sci_name, "scientificName.new", 
+                "scientificNameAuthorship.new")
 check <- dplyr::left_join(check, tmp, by = sci_name)
 # name matching to get the WCVP ID using plantR
 data("wcvpNames", package = "plantRdata")
@@ -44,6 +46,23 @@ head(tmp[tmp$tax.notes %in% "synonym", col2check], 10)                    # look
 check$plant_name_id <- gsub("wcvp-", "", tmp$id)
 check$plant_name_id[tmp$tax.notes %in% c("check +1 name", "orthographic variant")] <- NA
 
+# Some few manual replacements
+check$plant_name_id[check$scientificName %in% "Schinus microphyllus I.M.Johnst."] <- 2480197
+check$plant_name_id[check$scientificName %in% "Miconia theizans (Bonpl.) Cogn."] <- 3021066
+check$plant_name_id[check$scientificName %in% "Meriania paniculata Cogn."] <- 3018623 # ok! double-checked
+check$plant_name_id[check$scientificName %in% "Blakea cuatrecasii Gleason"] <- 3021378  # ok! double-checked
+check$plant_name_id[check$scientificName %in% "Guarea pubescens A.Juss."] <- 2834135
+check$plant_name_id[check$scientificName %in% "Ficus crassinervia Desf."] <- 2810070
+check$plant_name_id[check$scientificName %in% "Ouratea parviflora Engl."] <- 2400519 # ok! double-checked
+check$plant_name_id[check$scientificName %in% "Cleyera theaeoides (Sw.) Choisy"] <- 2727806
+check$plant_name_id[check$scientificName %in% "Pouteria macrocarpa D.Dietr."] <- 164246
+check$plant_name_id[check$scientificName %in% "Solanum campaniforme Roem. & Schult."] <- 3031602
+check$plant_name_id[check$scientificName %in% "Solanum laevigatum Dunal"] <- 3032083 # ok! double-checked
+check$plant_name_id[check$scientificName %in% "Solanum arboreum Dunal"] <- 3031502
+check$plant_name_id[check$scientificName %in% "Sebastiania brevifolia Klotzsch"] <- 189982 # ok! double-checked
+check$plant_name_id[check$scientificName %in% "Ficus ulei Warb."] <- 2812688
+
+
 ## Getting the year of first publication ---------------------------------------------------------------------
 wcvp <- as.data.frame(rWCVPdata::wcvp_names)
 
@@ -64,6 +83,31 @@ wcvp1 <- unique(wcvp[, c("plant_name_id", "first_published", "accepted_plant_nam
 wcvp1$plant_name_id <- as.character(wcvp1$plant_name_id) 
 wcvp1$accepted_plant_name_id <- as.character(wcvp1$accepted_plant_name_id)
 check <- dplyr::left_join(check, wcvp1, by = "plant_name_id")
+
+# getting missing publication year due to bad matches (mostly due to authorship format between WFO and WCVP)
+wcvp2 <- wcvp[, c("taxon_name", "taxon_authors", "plant_name_id","first_published", 
+                  "accepted_plant_name_id", "basionym_plant_name_id")]
+wcvp2 <- wcvp2[!is.na(wcvp2$first_published), ]
+wcvp2 <- wcvp2[!duplicated(wcvp2$taxon_name), ]
+names(wcvp2)[1] <- "scientificName.new"
+tmp <- dplyr::left_join(check, wcvp2, by = "scientificName.new", 
+                        suffix = c(".x", ""))
+rep_these <- is.na(check$first_published) & !is.na(tmp$first_published)
+if (any(rep_these)) {
+  # col2show <- c("scientificName", "scientificName.new", "taxon_authors")
+  # cbind(check, tmp)[rep_these, col2show] # visually inspection shows that most if not all differences due to missing authors in one or the other DB
+  auth1 <- strsplit(check$scientificNameAuthorship.new[rep_these], " ")
+  auth1 <- lapply(auth1, function(x) gsub("\\(|\\)|,$", "", x, perl = TRUE))
+  auth2 <- strsplit(tmp$taxon_authors[rep_these], " ")
+  auth2 <- lapply(auth2, function(x) gsub("\\(|\\)|,$", "", x, perl = TRUE))
+  f1 <- function(x, y) return(any(x %in% y | y %in% x))
+  name_diff <- mapply(f1, auth1, auth2, SIMPLIFY = FALSE)
+  # cbind(check, tmp)[rep_these, col2show][!unlist(name_diff),] # visually inspection shows that most if not all differences due to missing authors in one or the other DB
+  cols2rep <- c("plant_name_id", "first_published", "accepted_plant_name_id", 
+                "basionym_plant_name_id")
+  rep_these[rep_these][!unlist(name_diff)] <- FALSE
+  check[rep_these, cols2rep] <- tmp[rep_these, cols2rep]
+}
 check$first_published.new <- check$first_published
 
 # Getting year of publication in the case of basionyms
@@ -102,15 +146,28 @@ for (i in seq_along(all_ids)) {
 check$first_published.new <- as.double(check$first_published.new)
 check$first_published.new1 <- as.double(check$first_published.new1)
 
-# inspecting values
-plot(check$first_published.new1, check$first_published.new)
-ids <- !is.na(check$first_published.new) & 
-  check$first_published.new1 < check$first_published.new
-head(check[ids,])
+# removing infra specific levels (about 1400 taxa)
+rm_these <- !grepl(" var. | subsp. | f. | fo. ", check$scientificName, 
+                  perl = TRUE) 
+check1 <- check[rm_these, ]
 
-hist(check$first_published.new, nclass = 80)
-hist(check$first_published.new1, nclass = 80)
-table(check$first_published.new1)
+# NAs publication years (about 232 taxon without publication year)
+check_these <- (is.na(check1$first_published.new1) | is.na(check1$first_published.new))
+table(check_these)
+check1[check_these & is.na(check1$plant_name_id), ]
+
+# inspecting values
+plot(check1$first_published.new1, check1$first_published.new)
+ids <- !is.na(check1$first_published.new) & 
+  check1$first_published.new1 < check1$first_published.new
+head(check1[ids,])
+
+# hist(check1$first_published.new, nclass = 80)
+# hist(check1$first_published.new1, nclass = 80)
+table(check1$first_published.new1, useNA = "always")
+table(check1$first_published.new, useNA = "always")
+table(check1$first_published, useNA = "always")
+
 
 file.out <- "outputs/results_species_accumulation.txt"
 writeLines("#### MAIN METHODS AND RESULTS FROM THE EVALUATION OF THE SPECIES ACCUMULATION CURVE (from code: 12_species_accumulation.r) ####\n", 
@@ -120,10 +177,10 @@ This date corresponded to the oldest date of publication when accepted names con
 write(desc, file=file.out, append=TRUE)
 
 # Getting the data ready for downstream analyses
-anos <- seq(from=min(check$first_published.new, na.rm=T), 
-            to= max(check$first_published.new, na.rm=T), by=1)
-anos.pub <- check$first_published.new1
-species <- aggregate(check$scientificName, list(anos.pub), 
+anos <- seq(from=min(check1$first_published.new, na.rm=T), 
+            to= max(check1$first_published.new, na.rm=T), by=1)
+anos.pub <- check1$first_published.new1
+species <- aggregate(check1$scientificName, list(anos.pub), 
                      function(x) length(unique(x))) 
 dados.anos = merge (as.data.frame(anos), species, 
                     by.x="anos", by.y="Group.1", all=TRUE)
@@ -139,6 +196,11 @@ predict.years <- (max(dados.anos1$anos)+1):((max(dados.anos1$anos)+1+fut.year))
 ## Describing the species accumulation through time -----------------------------------------------------
 DATA1 <- data.frame(ano = c(dados.anos1$anos, predict.years),
                     sp.acum =  c(cumsum(dados.anos1$x), rep(NA, length(predict.years))))
+# adding some older years before any description to force a zero intercept
+prev.ys <- 15
+DATA1 <- rbind.data.frame(data.frame(ano=seq(min(DATA1$ano) - prev.ys, min(DATA1$ano)-1),
+                                     sp.acum = rep(0, prev.ys)), 
+                          DATA1)
 # max_sp1 <- max(as.double(DATA1[[2]]), na.rm = TRUE)
 # factor <- 1.7
 # DATA1$sp <- DATA1[[2]]/(max_sp1 * factor)
@@ -150,7 +212,7 @@ write(desc, file=file.out, append=TRUE)
 # Fitting different models to the data of number of species described per year
 models <- c("linear", 
             "exponential", 
-            # "quadratic",
+            "quadratic",
             # "logistic",
             "general_logistic",
             "saturating",
@@ -220,7 +282,7 @@ if (any("general_ricker" %in% models)) {
   f.gen <- sp ~ b * (ys/a * exp(1 - ys/a))^alpha
   gen_ricker <- try(stats::nls(f.gen, data = stats::na.omit(DATA1), 
                                start = list(a = 600, b = max(stats::na.omit(DATA1)$sp), 
-                                            alpha= 1.8)), TRUE)
+                                            alpha= 2.4)), TRUE)
   # nls.multstart::nls_multstart(f.gen,
   #                              data = stats::na.omit(DATA1),
   #                              start_lower = c(a = -1, b = -1, alpha = 0),
@@ -237,8 +299,8 @@ best.name <- "general_ricker"
 best1 <- model.ls1[[best.name]]
 DATA1$est.prop <- predict(best1, data.frame(ys = DATA1$ys))
 DATA1$est.prop[DATA1$est.prop < 0] <- 0
-DATA1$predicted <- round(DATA1$est.prop, 0)
-tail(DATA1)
+DATA1$predicted <- floor(DATA1$est.prop)
+head(DATA1, 25); tail(DATA1[!is.na(DATA1$sp), ], 10); tail(DATA1)
 
 desc <- cat("Next we fitted different candidate non-linear function to describe the species accumulation curve using the function nls() from base R (cite R).
 The candidate models were: ", models,"\n")
@@ -380,17 +442,17 @@ write(desc, file=file.out, append=TRUE)
 # Gen. ricker
 conf95 <- confint(best1)
 pico <- paste0(round(stats::coef(best1)[2], 0), " tree species [95% CI: ", 
-               round(conf95[2,1], 0), "-", 
-               round(conf95[2,2], 0), "]")
-toto <- range(check$first_published.new, na.rm = TRUE) # species described between 1753 and 2023
+               floor(conf95[2,1]), "-", 
+               ceiling(conf95[2,2]), "]")
+toto <- range(check1$first_published.new, na.rm = TRUE) # species described between 1753 and 2023
 ano.pico <- paste0(seq(toto[1], toto[1]+1000, 1)[round(stats::coef(best1)[1], 0)], " [95% CI: ",
-                   seq(toto[1], toto[1]+1000, 1)[round(conf95[1,1], 0)], "-", 
-                   seq(toto[1], toto[1]+1000, 1)[round(conf95[1,2], 0)], "]")
-check[check$first_published %in% toto[1], ]
+                   seq(toto[1], toto[1]+1000, 1)[floor(conf95[1,1])], "-", 
+                   seq(toto[1], toto[1]+1000, 1)[ceiling(conf95[1,2])], "]")
+check1[check1$first_published %in% toto[1], ]
 desc <- paste0("The earliest species in our study area were described in ", toto[1],". The rate of species described each year increased until the early 20s of the last century, when the rate started to decrease. \n", sep="")
 write(desc, file=file.out, append=TRUE)
 desc <- paste0("However, we estimated that there still are ", 
-               round(stats::coef(best1)[2], 0) - dim(check)[1], 
+               round(stats::coef(best1)[2], 0) - dim(check1)[1], 
                " tree species to be discovered in tropical America, a feat that will result in a total of ", pico,
               " and that will not be achieved before the year of ", 
                ano.pico,", given the historical rate of species discovery.\n", sep="")
@@ -411,24 +473,25 @@ pdf(file = "./outputs/FigureXX.pdf", width = 7.24, height = 7.1, pointsize = 12,
     compress = FALSE, useDingbats = FALSE)
 
 ## species accumulation
-ylim <- range(DATA1[grepl("sp|est.prop|pred", names(DATA1))], 
+DATA2 <- DATA1[-c(1:prev.ys), ]
+ylim <- range(DATA1[grepl("sp|est.prop|pred", names(DATA2))], 
               na.rm = TRUE)
-xlim <- range(DATA1$ys, na.rm = TRUE)
-preds1 <- predict(best1, data.frame(ys = seq(range(DATA1$ys)[1], 
-                                           range(DATA1$ys)[2], by = 1)))
+xlim <- range(DATA2$ys, na.rm = TRUE)
+preds1 <- predict(best1, data.frame(ys = seq(range(DATA2$ys)[1], 
+                                           range(DATA2$ys)[2], by = 1)))
 graphics::par(mfrow = c(1, 1), mgp = c(3, 0.45, 0), 
               mar = c(4.5, 4.5, 1, 1))
-graphics::plot(DATA1$sp ~ DATA1$ys, pch = 19, cex = 1.2, col = adjustcolor("black", alpha.f = 0.15), 
+graphics::plot(DATA2$sp ~ DATA2$ys, pch = 19, cex = 1.2, col = adjustcolor("black", alpha.f = 0.15), 
                ylim = ylim, xlim = xlim, xlab = "Years", ylab = "New species described", 
                xaxt = "n", yaxt = "n", cex.lab = 1.4)
-graphics::axis(1, at = seq(min(DATA1$ys), max(DATA1$ys), 10), 
-               labels = seq(min(DATA1$ano), max(DATA1$ano), 10), 
+graphics::axis(1, at = seq(min(DATA2$ys), max(DATA2$ys), 10), 
+               labels = seq(min(DATA2$ano), max(DATA2$ano), 10), 
                tcl = -0.3)
 ats <- pretty(seq(min(ylim), max(ylim), 0.1))
 axis(2, at = ats, labels = ats, 
      las = 1, tcl = -0.3)
-range1 <- (range(stats::na.omit(DATA1)$ys)[1] - 1)
-range2 <- (range(stats::na.omit(DATA1)$ys)[2] + 1)
+range1 <- (range(stats::na.omit(DATA2)$ys)[1] - 1)
+range2 <- (range(stats::na.omit(DATA2)$ys)[2] + 1)
 leg.pos <- "bottomright"
 
 if (best.name == "general_ricker") {
@@ -440,8 +503,9 @@ if (best.name == "general_ricker") {
   #                 from = range1, to = range2, add = TRUE, lwd = 2, 
   #                 col = "red")
   # Plot the profile with specified confidence levels
-  lines(anos_ci, DATA1$pred.low.95, col = 2, lwd = 2, lty = 2)
-  lines(anos_ci, DATA1$pred.high.95, col = 2, lwd = 2, lty = 2)
+  anos_ci1 <- anos_ci[-c(1:prev.ys)]
+  lines(anos_ci1, DATA2$pred.low.95, col = 2, lwd = 2, lty = 2)
+  lines(anos_ci1, DATA2$pred.high.95, col = 2, lwd = 2, lty = 2)
 
   legend(leg.pos, c("Ricker model"), lwd = 3,
          col = "red", bty = "n", cex = 1.4)
