@@ -40,6 +40,10 @@ final_df1 <- terra::vect(final_df[final_df$is_realm_predominant %in% FALSE
                                   "decimalLatitude.new1"), 
                          crs = "epsg:4326")
 
+# Get the number of endemic species to be used for biome-interpolation here
+aggregate(scientificName ~ efg_endemic, data = final_df, 
+          FUN = function(x) length(unique(x)))
+
 # Get cell numbers for all points
 cell_numbers <- terra::cellFromXY(my_we_raster, terra::crds(final_df1))
 cell_numbers_biomes <- list()
@@ -354,8 +358,14 @@ cond3 <- my_we_raster1$SC >= sc_quantiles["75%"] &
   my_we_raster1$n >= 30 # 50 / 75
 
 # Tag rows that meet any condition
-# We are using 37% of cells to interpolate in all tropical America
 my_we_raster1$use_this <- cond1 | cond2 | cond3
+# How many cells and the description of the cells per se
+sum(my_we_raster1$use_this[my_we_raster1$use_this %in% TRUE]) /
+  nrow(my_we_raster1) # 37% of cells
+# Other metrics for n of occurrences and sampling coverage
+summary(my_we_raster1$n[my_we_raster1$use_this %in% TRUE])
+summary(my_we_raster1$SC[my_we_raster1$use_this %in% TRUE])
+
 # Changing one name
 names(my_we_raster1)[which(names(my_we_raster1) == "our_efg")] <- "we"
 
@@ -511,117 +521,117 @@ for (i in seq_along(my_we_grid_biomes)) {
 # Subsetting the data to run gls (~ 1,000 points randomly choosen)
 ##### Maybe 2,000 points is ok...test later #####
 
-# This is needed to properly compare the metrics
-my_we_raster_true <- my_we_raster1[my_we_raster1$use_this %in% TRUE, ]
-sample_size <- round(0.5 * nrow(my_we_raster_true))
-sample_indices <- sample(1:nrow(my_we_raster_true), 
-                         size = sample_size)
-my_we_raster_true <- my_we_raster_true[sample_indices, ]
-
-# For weighted endemism
-tmp0 = lm(log(we) ~ 1, data = my_we_raster_true)
-tmp1  = MASS::rlm(log(we) ~ log(n), data = my_we_raster_true)
-tmp2 = lm(log(we) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC)
-tmp3 = lm(log(we) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC^3)
-tmp4 = nlme::gls(log(we) ~ log(n), data = my_we_raster_true, 
-                 corr = nlme::corExp(spp_corr_we, form= ~x+y, nugget = FALSE), 
-                 control = list(maxIter = 20, tolerance = 0.01))
-
-# Model selection using AICc
-mod_comparions <- performance::compare_performance(tmp0, tmp1, tmp2, tmp3, tmp4)
-(best_model <- mod_comparions$Model[which.min(mod_comparions$AIC)])
-
-# For observed richness
-tmp00 = lm(log(S.obs) ~ 1, data = my_we_raster_true)
-tmp11  = MASS::rlm(log(S.obs) ~ log(n), data = my_we_raster_true)
-tmp22 = lm(log(S.obs) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC)
-tmp33 = lm(log(S.obs) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC^3)
-tmp44 = nlme::gls(log(S.obs) ~ log(n), data = my_we_raster_true,
-                  corr = nlme::corExp(spp_corr_sr, form= ~x+y, nugget = FALSE),
-                  control = list(maxIter = 20, tolerance = 0.01))
-
-# Model selection using AICc
-mod_comparions <- performance::compare_performance(tmp00, tmp11, tmp22, tmp33, tmp44)
-(best_model <- mod_comparions$Model[which.min(mod_comparions$AIC)])
-
-
-# For observed Simpson
-tmp000 = lm(log(Simp.obs) ~ 1, data = my_we_raster_true)
-tmp111  = MASS::rlm(log(Simp.obs) ~ log(n), data = my_we_raster_true)
-tmp222 = lm(log(Simp.obs) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC)
-tmp333 = lm(log(Simp.obs) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC^3)
-tmp444 = nlme::gls(log(Simp.obs) ~ log(n), data = my_we_raster_true,
-                   corr = nlme::corExp(spp_corr_simp, form= ~x+y, nugget = FALSE),
-                   control = list(maxIter = 20, tolerance = 0.01))
-
-# Model selection using AICc
-mod_comparions <- performance::compare_performance(tmp000, tmp111, tmp222, tmp333, tmp444)
-(best_model <- mod_comparions$Model[which.min(mod_comparions$AIC)])
-
-
-svg("figures/FigureS2.svg", width = 5, height = 10)
-par(mfrow = c(3, 1))
-plot(we ~ n, 
-     log = "xy",
-     data = my_we_raster_true,
-     # pch = 19,
-     xlab = "Number of occurrences", 
-     ylab = "Weighted endemism")
-curve(exp(predict(tmp4, newdata = data.frame(n = x))), 
-      col = "red",
-      lwd = 2, 
-      add = TRUE)
-
-R2 <- cor(log(my_we_raster_true$we), predict(tmp4))^2
-df = tmp4$dims$N - tmp4$dims$p
-legend("topleft", legend = do.call(expression, list(
-  bquote(italic(F)~"- test="~.(round(anova(tmp4)$F[2], 1))),
-  bquote("d.f. = "~.(df)),
-  bquote({pseudo-italic(R)^2}~"="~.(round(R2*100, 1))~"%")
-)),
-bty = "n", horiz = F, cex = 1
-)
-
-plot(S.obs ~ n,
-     log = "xy",
-     data = my_we_raster_true,
-     # pch = 19,
-     xlab = "Number of occurrences", 
-     ylab = "Species richness")
-curve(exp(predict(tmp44, newdata = data.frame(n = x))), 
-      col = "red",
-      lwd = 2, 
-      add = TRUE)
-
-R2 <- cor(log(my_we_raster_true$S.obs), predict(tmp44))^2
-df = tmp44$dims$N - tmp4$dims$p
-legend("topleft", legend = do.call(expression, list(
-  bquote(italic(F)~"- test="~.(round(anova(tmp44)$F[2], 1))),
-  bquote("d.f. = "~.(df)),
-  bquote({pseudo-italic(R)^2}~"="~.(round(R2*100, 1))~"%")
-)),
-bty = "n", horiz = F, cex = 1
-)
-
-plot(Simp.obs ~ n,
-     log = "xy",
-     data = my_we_raster_true,
-     # pch = 19,
-     xlab = "Number of occurrences", 
-     ylab = "Simpson diversity")
-curve(exp(predict(tmp444, newdata = data.frame(n = x))), 
-      col = "red",
-      lwd = 2, 
-      add = TRUE)
-
-R2 <- cor(log(my_we_raster_true$Simp.obs), predict(tmp444))^2
-df = tmp444$dims$N - tmp4$dims$p
-legend("topleft", legend = do.call(expression, list(
-  bquote(italic(F)~"- test="~.(round(anova(tmp444)$F[2], 1))),
-  bquote("d.f. = "~.(df)),
-  bquote({pseudo-italic(R)^2}~"="~.(round(R2*100, 1))~"%")
-)),
-bty = "n", horiz = F, cex = 1
-)
-
-dev.off()
+# # This is needed to properly compare the metrics
+# my_we_raster_true <- my_we_raster1[my_we_raster1$use_this %in% TRUE, ]
+# sample_size <- round(0.5 * nrow(my_we_raster_true))
+# sample_indices <- sample(1:nrow(my_we_raster_true), 
+#                          size = sample_size)
+# my_we_raster_true <- my_we_raster_true[sample_indices, ]
+# 
+# # For weighted endemism
+# tmp0 = lm(log(we) ~ 1, data = my_we_raster_true)
+# tmp1  = MASS::rlm(log(we) ~ log(n), data = my_we_raster_true)
+# tmp2 = lm(log(we) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC)
+# tmp3 = lm(log(we) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC^3)
+# tmp4 = nlme::gls(log(we) ~ log(n), data = my_we_raster_true, 
+#                  corr = nlme::corExp(spp_corr_we, form= ~x+y, nugget = FALSE), 
+#                  control = list(maxIter = 20, tolerance = 0.01))
+# 
+# # Model selection using AICc
+# mod_comparions <- performance::compare_performance(tmp0, tmp1, tmp2, tmp3, tmp4)
+# (best_model <- mod_comparions$Model[which.min(mod_comparions$AIC)])
+# 
+# # For observed richness
+# tmp00 = lm(log(S.obs) ~ 1, data = my_we_raster_true)
+# tmp11  = MASS::rlm(log(S.obs) ~ log(n), data = my_we_raster_true)
+# tmp22 = lm(log(S.obs) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC)
+# tmp33 = lm(log(S.obs) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC^3)
+# tmp44 = nlme::gls(log(S.obs) ~ log(n), data = my_we_raster_true,
+#                   corr = nlme::corExp(spp_corr_sr, form= ~x+y, nugget = FALSE),
+#                   control = list(maxIter = 20, tolerance = 0.01))
+# 
+# # Model selection using AICc
+# mod_comparions <- performance::compare_performance(tmp00, tmp11, tmp22, tmp33, tmp44)
+# (best_model <- mod_comparions$Model[which.min(mod_comparions$AIC)])
+# 
+# 
+# # For observed Simpson
+# tmp000 = lm(log(Simp.obs) ~ 1, data = my_we_raster_true)
+# tmp111  = MASS::rlm(log(Simp.obs) ~ log(n), data = my_we_raster_true)
+# tmp222 = lm(log(Simp.obs) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC)
+# tmp333 = lm(log(Simp.obs) ~ log(n), data = my_we_raster_true, weights = my_we_raster_true$SC^3)
+# tmp444 = nlme::gls(log(Simp.obs) ~ log(n), data = my_we_raster_true,
+#                    corr = nlme::corExp(spp_corr_simp, form= ~x+y, nugget = FALSE),
+#                    control = list(maxIter = 20, tolerance = 0.01))
+# 
+# # Model selection using AICc
+# mod_comparions <- performance::compare_performance(tmp000, tmp111, tmp222, tmp333, tmp444)
+# (best_model <- mod_comparions$Model[which.min(mod_comparions$AIC)])
+# 
+# 
+# svg("figures/FigureS2.svg", width = 5, height = 10)
+# par(mfrow = c(3, 1))
+# plot(we ~ n, 
+#      log = "xy",
+#      data = my_we_raster_true,
+#      # pch = 19,
+#      xlab = "Number of occurrences", 
+#      ylab = "Weighted endemism")
+# curve(exp(predict(tmp4, newdata = data.frame(n = x))), 
+#       col = "red",
+#       lwd = 2, 
+#       add = TRUE)
+# 
+# R2 <- cor(log(my_we_raster_true$we), predict(tmp4))^2
+# df = tmp4$dims$N - tmp4$dims$p
+# legend("topleft", legend = do.call(expression, list(
+#   bquote(italic(F)~"- test="~.(round(anova(tmp4)$F[2], 1))),
+#   bquote("d.f. = "~.(df)),
+#   bquote({pseudo-italic(R)^2}~"="~.(round(R2*100, 1))~"%")
+# )),
+# bty = "n", horiz = F, cex = 1
+# )
+# 
+# plot(S.obs ~ n,
+#      log = "xy",
+#      data = my_we_raster_true,
+#      # pch = 19,
+#      xlab = "Number of occurrences", 
+#      ylab = "Species richness")
+# curve(exp(predict(tmp44, newdata = data.frame(n = x))), 
+#       col = "red",
+#       lwd = 2, 
+#       add = TRUE)
+# 
+# R2 <- cor(log(my_we_raster_true$S.obs), predict(tmp44))^2
+# df = tmp44$dims$N - tmp4$dims$p
+# legend("topleft", legend = do.call(expression, list(
+#   bquote(italic(F)~"- test="~.(round(anova(tmp44)$F[2], 1))),
+#   bquote("d.f. = "~.(df)),
+#   bquote({pseudo-italic(R)^2}~"="~.(round(R2*100, 1))~"%")
+# )),
+# bty = "n", horiz = F, cex = 1
+# )
+# 
+# plot(Simp.obs ~ n,
+#      log = "xy",
+#      data = my_we_raster_true,
+#      # pch = 19,
+#      xlab = "Number of occurrences", 
+#      ylab = "Simpson diversity")
+# curve(exp(predict(tmp444, newdata = data.frame(n = x))), 
+#       col = "red",
+#       lwd = 2, 
+#       add = TRUE)
+# 
+# R2 <- cor(log(my_we_raster_true$Simp.obs), predict(tmp444))^2
+# df = tmp444$dims$N - tmp4$dims$p
+# legend("topleft", legend = do.call(expression, list(
+#   bquote(italic(F)~"- test="~.(round(anova(tmp444)$F[2], 1))),
+#   bquote("d.f. = "~.(df)),
+#   bquote({pseudo-italic(R)^2}~"="~.(round(R2*100, 1))~"%")
+# )),
+# bty = "n", horiz = F, cex = 1
+# )
+# 
+# dev.off()

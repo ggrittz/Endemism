@@ -14,6 +14,8 @@ if(!dir.exists(path_to_save))
   dir.create(path_to_save)
 
 # From JABOT IPT, get each herbarium and the most updated version of the data
+
+##### I may need to add a tryCatch here since JABOT seems buggy #####
  
 for(i in seq_along(herbaria)){
  

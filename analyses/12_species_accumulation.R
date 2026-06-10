@@ -47,6 +47,8 @@ check$plant_name_id <- gsub("wcvp-", "", tmp$id)
 check$plant_name_id[tmp$tax.notes %in% c("check +1 name", "orthographic variant")] <- NA
 
 # Some few manual replacements
+# scientificNames in the plantR::checkList function do not have the authorship!
+# For now, I will not modify here since there are only a few species...(27/02/2026)
 check$plant_name_id[check$scientificName %in% "Schinus microphyllus I.M.Johnst."] <- 2480197
 check$plant_name_id[check$scientificName %in% "Miconia theizans (Bonpl.) Cogn."] <- 3021066
 check$plant_name_id[check$scientificName %in% "Meriania paniculata Cogn."] <- 3018623 # ok! double-checked

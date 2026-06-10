@@ -8,7 +8,7 @@ folders <- list.files(file_path, full.names = TRUE)
 family_names <- readRDS(here::here("data", "derived-data", "family_names.rds"))
 
 # Load gazetteer, taxonomists from raw-dictionaries, and phylo data
-path_plantR <- file.path("D:", "plantR", "data-raw", "raw_dictionaries", "taxonomists.csv")
+path_plantR <- file.path("..", "..", "..", "plantR", "data-raw", "raw_dictionaries", "taxonomists.csv")
 tax_plantR <- read.csv(path_plantR)
 fam_plantR <- plantR:::familiesSynonyms
 
@@ -22,11 +22,13 @@ tax_list <- list()
 
 # Loop through family names
 for (i in family_names) {
+  cat("Loading", i, "\n")
   rds_file <- file.path(file_path, i, paste0(i, ".rds"))
   
   if (file.exists(rds_file)) {
     family_data <- readRDS(rds_file)
-    family_data <- family_data[, c("tax.check1", "identifiedBy.new1", "basisOfRecord")]
+    family_data <- family_data[, c("tax.check1", "identifiedBy", 
+                                   "identifiedBy.new1", "basisOfRecord")]
   } else {
     cat("File not found:", i, "\n")
     missing_families <- c(missing_families, i)
@@ -36,28 +38,47 @@ for (i in family_names) {
   if (all(family_data$tax.check1 == "high")) {
     next
   } else {
-    non.tax.det <- family_data[family_data$basisOfRecord %in% c("PRESERVED_SPECIMEN", 
-                                                                "PreservedSpecimen"), ]
-    non.tax.det <- non.tax.det[, 1:2]
-    non.tax.det <- sort(table(family_data[family_data$tax.check1 %in% "low", "identifiedBy.new1"]))
-    non.tax.det.df <- data.frame(names(non.tax.det), as.double(non.tax.det))
+    # non.tax.det <- family_data[family_data$basisOfRecord %in% c("PRESERVED_SPECIMEN", 
+    #                                                             "PreservedSpecimen"), ]
+    # non.tax.det <- non.tax.det[, 1:3]
+    non.tax.det <- family_data[family_data$tax.check1 %in% "low", ]
+    
+    # Aggregate by identifiedBy.new1
+    non.tax.det.agg <- aggregate(identifiedBy ~ identifiedBy.new1,
+                             data = non.tax.det,
+                             FUN = function(x) paste(sort(unique(x)), collapse = "|"))
+    
+    count <- data.frame(table(non.tax.det$identifiedBy.new1))
+    
+    non.tax.det.full <- dplyr::left_join(non.tax.det.agg, count,
+                                         by = c("identifiedBy.new1" = "Var1"))
+    
+    bOR <- aggregate(basisOfRecord ~ identifiedBy.new1,
+                     data = non.tax.det,
+                     FUN = function(x) paste(sort(unique(x)), collapse = "|"))
+    
+    non.tax.det.full <- dplyr::left_join(non.tax.det.full,
+                                         bOR,
+                                         by = "identifiedBy.new1")
+    names(non.tax.det.full) <- c("tdwg.name", "full.name1", "family1", "basisOfRecord")
+
     # non.tax.det.df$prop.det <- non.tax.det.df$as.double.non.tax.det. / dim(family_data)[1]
-    row.names(non.tax.det.df) <- NULL
-    colnames(non.tax.det.df) <- c("tdwg.name", "family1")
+    row.names(non.tax.det.full) <- NULL
+    # colnames(non.tax.det.df) <- c("tdwg.name", "family1")
     # 176 was the median of identifications considering a minimum number of 100 IDs for families
     # Using 150
-    non.tax.det.df <- non.tax.det.df[non.tax.det.df$family1 >= 150, ]
-    non.tax.det.df <- non.tax.det.df[order(non.tax.det.df$family1, decreasing = TRUE), ]
-    non.tax.det.df <- non.tax.det.df[!non.tax.det.df$tdwg.name %in% "s.n", ]
+    non.tax.det.full <- non.tax.det.full[non.tax.det.full$family1 >= 150, ]
+    non.tax.det.full <- non.tax.det.full[order(non.tax.det.full$family1, decreasing = TRUE), ]
+    non.tax.det.full <- non.tax.det.full[!non.tax.det.full$tdwg.name %in% "s.n", ]
     
-    if (nrow(non.tax.det.df) == 0){
+    if (nrow(non.tax.det.full) == 0){
       next
     } else {
       
       # Populate new columns
-      non.tax.det.df$family <- i
-      non.tax.det.df$source <- "gbif_GSG"
-      tax_list[[i]] <- non.tax.det.df
+      non.tax.det.full$family <- i
+      non.tax.det.full$source <- "gbif_GSG"
+      tax_list[[i]] <- non.tax.det.full
     }
   }
 }
@@ -65,12 +86,26 @@ for (i in family_names) {
 # This tax_list is the first new input to plantR taxonomists
 tax_list <- do.call(rbind, tax_list)
 rownames(tax_list) <- NULL
-tax_list$full.name1 <- NA
 tax_list$last.name <- tolower(plantR::lastName(tax_list$tdwg.name))
-tax_list$family.obs <- NA
-tax_list$order <- NA
-tax_list$family.obs1 <- NA
+tax_list$complete_to_match <- paste0(tax_list$tdwg.name, "_", tax_list$family, "?")
+# Load Renato new taxonomists
+tax_new <- as.data.frame(readxl::read_xlsx(here::here("fixing_taxonomists_RAFL.xlsx")))
+tax_new$complete_to_match <- paste0(tax_new$tdwg.name, "_", tax_new$tax)
+tax_new$full.name1 <- gsub("^NA$", NA, tax_new$full.name1)
 
+# Match them
+tax_new_joined <- dplyr::left_join(tax_new,
+                                   tax_list[, c("complete_to_match", "full.name1", "basisOfRecord")],
+                                   by = "complete_to_match",
+                                   suffix = c("", ".from_tax_list"))
+
+tax_new_joined$full.name1 <- ifelse(!is.na(tax_new_joined$full.name1.from_tax_list),
+                                    tax_new_joined$full.name1.from_tax_list,
+                                    tax_new_joined$full.name1)
+
+tax_new_joined$full.name1.from_tax_list <- NULL
+# save here for Renato
+writexl::write_xlsx(tax_new_joined, "fixing_taxonomists_GSG_additions.xlsx")
 
 
 # Scrapping COL ChecklistBank ---------------------------------------------

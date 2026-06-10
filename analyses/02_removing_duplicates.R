@@ -65,6 +65,9 @@ for (i in family_names) {
     next
   }
   
+  ##### Save new getDup error HERE! #####
+  # saveRDS(family_data, here::here("getDup_error_new.rds"))
+  
   # Remove irrelevant additional columns used before
   #to_remove <- c("datelastmodified", "scientificname_full",
   #               "scientificName.1", "gbifID")

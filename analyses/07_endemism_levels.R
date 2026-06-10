@@ -106,8 +106,7 @@ our_names <- our_names[!duplicated(our_names$our_accepted_scientificName), ]
 # And filter only good registers for weighted endemism --------------------
 
 
-
-##### ADDING TAXONOMY FIX HERE; FOR THE MOMENT #####
+##### ADDING TAXONOMY FIX HERE #####
 
 # Get WFO parentalID for these cases...
 raw_path <- here::here("data", "raw-data", "WFO")
@@ -129,8 +128,6 @@ wfo_dt <- data.table::as.data.table(wfo)
 raw_path1 <- here::here("data", "raw-data", "WCVP")
 wcvp <- data.table::fread(file.path(raw_path1, "wcvp_taxon.csv"))
 wcvp_dt <- data.table::as.data.table(wcvp)
-
-
 rm(wfo, wcvp)
 
 # Do it by family
@@ -148,8 +145,8 @@ for(i in family_names){
   
   
 
-# START OF TAXONOMY FIX ---------------------------------------------------
-
+  # START OF TAXONOMY FIX ---------------------------------------------------
+  
   
   
   ##### I AM ADDING THIS FIX HERE, FOR THE MOMENT #####
@@ -164,111 +161,115 @@ for(i in family_names){
   
   # Get infraspecific names
   infraspecific_names <- family_data$taxonName[get_these]
-
-  # Create a lookup table
-  wfo_lookup <- wfo_dt[scientificName %in% infraspecific_names, 
-                       .(scientificName, 
-                         scientificNameAuthorship,
-                         parentNameUsageID,
-                         acceptedNameUsageID,
-                         taxonomicStatus,
-                         taxonRank)]
   
-  # Remove unchecked names
-  # wfo_lookup <- wfo_lookup[!wfo_lookup$taxonomicStatus %in% "Unchecked", ]
-  
-  # Use the acceptedID when parentNameUsageID is empty 
-  wfo_lookup[parentNameUsageID == "", parentNameUsageID := acceptedNameUsageID]
-  
-  # Get parent names for infraspecific taxa
-  wfo_parents <- wfo_dt[taxonID %in% wfo_lookup[!is.na(parentNameUsageID) & 
-                                                  parentNameUsageID != ""]$parentNameUsageID,
-                        .(taxonID, 
-                          parent_scientificName = scientificName,
-                          parent_scientificNameAuthorship = scientificNameAuthorship)]
-  
-  wfo_lookup <- dplyr::left_join(wfo_lookup, wfo_parents,
-                                 by = c("parentNameUsageID" = "taxonID"))
-  
-  # Deal with synonyms that caused new accepted names to have subsp./var./f.
-  get_these1 <- which(grepl(" var\\. | subsp\\. | f\\. | fo\\. ", 
-                            wfo_lookup$parent_scientificName,
-                            perl = TRUE))
-  
-  # Only process problematic cases if they exist
-  if(length(get_these1) > 0) {
-    # wfo_lookup$parent_scientificName[get_these1]
+  # Create a lookup table - ONLY RUN IF THERE ARE INFRASPECIFIC NAMES
+  if(length(infraspecific_names) > 0) {
+    wfo_lookup <- wfo_dt[scientificName %in% infraspecific_names, 
+                         .(scientificName, 
+                           scientificNameAuthorship,
+                           parentNameUsageID,
+                           acceptedNameUsageID,
+                           taxonomicStatus,
+                           taxonRank)]
+    
+    # Remove unchecked names
+    # wfo_lookup <- wfo_lookup[!wfo_lookup$taxonomicStatus %in% "Unchecked", ]
+    
+    # Use the acceptedID when parentNameUsageID is empty 
+    wfo_lookup[parentNameUsageID == "", parentNameUsageID := acceptedNameUsageID]
+    
+    # Get parent names for infraspecific taxa
+    wfo_parents <- wfo_dt[taxonID %in% wfo_lookup[!is.na(parentNameUsageID) & 
+                                                    parentNameUsageID != ""]$parentNameUsageID,
+                          .(taxonID, 
+                            parent_scientificName = scientificName,
+                            parent_scientificNameAuthorship = scientificNameAuthorship)]
+    
+    wfo_lookup <- dplyr::left_join(wfo_lookup, wfo_parents,
+                                   by = c("parentNameUsageID" = "taxonID"))
     
     # Deal with synonyms that caused new accepted names to have subsp./var./f.
     get_these1 <- which(grepl(" var\\. | subsp\\. | f\\. | fo\\. ", 
                               wfo_lookup$parent_scientificName,
                               perl = TRUE))
     
-    # Get the parent IDs for these problematic cases
-    problem_parent_ids <- wfo_lookup$parentNameUsageID[get_these1]
-    
-    # Get the parents of these problematic parents (the next level up)
-    higher_parents <- wfo_dt[taxonID %in% wfo_dt[taxonID %in% problem_parent_ids]$parentNameUsageID,
-                             .(taxonID,
-                               parent_scientificName_fixed = scientificName,
-                               parent_scientificNameAuthorship_fixed = scientificNameAuthorship)]
-    
-    # Get the mapping of which original parent ID maps to which higher parent
-    parent_mapping <- wfo_dt[taxonID %in% problem_parent_ids,
-                             .(original_parent_id = taxonID,
-                               higher_parent_id = parentNameUsageID)]
-    
-    # Join to get the fixed names
-    parent_mapping <- dplyr::left_join(parent_mapping, higher_parents,
-                                       by = c("higher_parent_id" = "taxonID"))
-    
-    # Update wfo_lookup
-    for(k in seq_along(get_these1)) {
-      row_idx <- get_these1[k]
-      original_parent_id <- wfo_lookup$parentNameUsageID[row_idx]
+    # Only process problematic cases if they exist
+    if(length(get_these1) > 0) {
+      # wfo_lookup$parent_scientificName[get_these1]
       
-      match_idx <- which(parent_mapping$original_parent_id == original_parent_id)
+      # Deal with synonyms that caused new accepted names to have subsp./var./f.
+      get_these1 <- which(grepl(" var\\. | subsp\\. | f\\. | fo\\. ", 
+                                wfo_lookup$parent_scientificName,
+                                perl = TRUE))
       
-      if(length(match_idx) > 0) {
-        wfo_lookup$parent_scientificName[row_idx] <- parent_mapping$parent_scientificName_fixed[match_idx]
-        wfo_lookup$parent_scientificNameAuthorship[row_idx] <- parent_mapping$parent_scientificNameAuthorship_fixed[match_idx]
+      # Get the parent IDs for these problematic cases
+      problem_parent_ids <- wfo_lookup$parentNameUsageID[get_these1]
+      
+      # Get the parents of these problematic parents (the next level up)
+      higher_parents <- wfo_dt[taxonID %in% wfo_dt[taxonID %in% problem_parent_ids]$parentNameUsageID,
+                               .(taxonID,
+                                 parent_scientificName_fixed = scientificName,
+                                 parent_scientificNameAuthorship_fixed = scientificNameAuthorship)]
+      
+      # Get the mapping of which original parent ID maps to which higher parent
+      parent_mapping <- wfo_dt[taxonID %in% problem_parent_ids,
+                               .(original_parent_id = taxonID,
+                                 higher_parent_id = parentNameUsageID)]
+      
+      # Join to get the fixed names
+      parent_mapping <- dplyr::left_join(parent_mapping, higher_parents,
+                                         by = c("higher_parent_id" = "taxonID"))
+      
+      # Update wfo_lookup
+      for(k in seq_along(get_these1)) {
+        row_idx <- get_these1[k]
+        original_parent_id <- wfo_lookup$parentNameUsageID[row_idx]
+        
+        match_idx <- which(parent_mapping$original_parent_id == original_parent_id)
+        
+        if(length(match_idx) > 0) {
+          wfo_lookup$parent_scientificName[row_idx] <- parent_mapping$parent_scientificName_fixed[match_idx]
+          wfo_lookup$parent_scientificNameAuthorship[row_idx] <- parent_mapping$parent_scientificNameAuthorship_fixed[match_idx]
+        }
       }
     }
+    
+    # When there are duplicates, keep only the accepted
+    wfo_lookup <- wfo_lookup[order(taxonomicStatus != "Accepted")]
+    wfo_lookup <- wfo_lookup[!duplicated(scientificName), ]
+    
+    ##### FINALLY SUBSTITUTE THE NAMES #####
+    
+    # Named vector for quick lookup
+    parent_name_lookup <- setNames(wfo_lookup$parent_scientificName, wfo_lookup$scientificName)
+    parent_author_lookup <- setNames(wfo_lookup$parent_scientificNameAuthorship, wfo_lookup$scientificName)
+    
+    # Find matches
+    matches <- family_data$taxonName %in% names(parent_name_lookup)
+    
+    # For rows with matches, update taxonName and taxonAuthor
+    if(sum(matches) > 0) {
+      # Get the matching scientific names
+      matching_names <- family_data$taxonName[matches]
+      # Update taxonName with parent_scientificName
+      family_data$taxonName[matches] <- parent_name_lookup[matching_names]
+      # Update taxonAuthor with parent_scientificNameAuthorship
+      family_data$taxonAuthor[matches] <- parent_author_lookup[matching_names]
+      # Recreate scientificName column
+      family_data$scientificName[matches] <- ifelse(
+        !is.na(family_data$taxonAuthor[matches]) & family_data$taxonAuthor[matches] != "",
+        paste(family_data$taxonName[matches], family_data$taxonAuthor[matches]),
+        family_data$taxonName[matches]
+      )
+    }
+    
+    
+    
+    # Remove unchecked names now (they become NA on taxonName, taxonAuthor etc.)
+    # family_data <- family_data[!is.na(family_data$taxonName), ]
+  } else {
+    cat("  No infraspecific names found for WFO fix in", i, "- skipping\n")
   }
-  
-  # When there are duplicates, keep only the accepted
-  wfo_lookup <- wfo_lookup[order(taxonomicStatus != "Accepted")]
-  wfo_lookup <- wfo_lookup[!duplicated(scientificName), ]
-  
-  ##### FINALLY SUBSTITUTE THE NAMES #####
-  
-  # Named vector for quick lookup
-  parent_name_lookup <- setNames(wfo_lookup$parent_scientificName, wfo_lookup$scientificName)
-  parent_author_lookup <- setNames(wfo_lookup$parent_scientificNameAuthorship, wfo_lookup$scientificName)
-  
-  # Find matches
-  matches <- family_data$taxonName %in% names(parent_name_lookup)
-  
-  # For rows with matches, update taxonName and taxonAuthor
-  if(sum(matches) > 0) {
-    # Get the matching scientific names
-    matching_names <- family_data$taxonName[matches]
-    # Update taxonName with parent_scientificName
-    family_data$taxonName[matches] <- parent_name_lookup[matching_names]
-    # Update taxonAuthor with parent_scientificNameAuthorship
-    family_data$taxonAuthor[matches] <- parent_author_lookup[matching_names]
-  }
-  
-  # Recreate scientificName column
-  family_data$scientificName <- ifelse(
-    !is.na(family_data$taxonAuthor) & family_data$taxonAuthor != "",
-    paste(family_data$taxonName, family_data$taxonAuthor),
-    family_data$taxonName
-  )
-  
-  # Remove unchecked names now (they become NA on taxonName, taxonAuthor etc.)
-  # family_data <- family_data[!is.na(family_data$taxonName), ]
-  
   
   ###########################################################
   ###########################################################
@@ -286,103 +287,109 @@ for(i in family_names){
   # Get infraspecific names
   infraspecific_names <- family_data$taxonName[get_these]
   
-  # Create a lookup table
-  wcvp_lookup <- wcvp_dt[scientfiicname %in% infraspecific_names, 
-                       .(scientfiicname, 
-                         scientfiicnameauthorship,
-                         parentnameusageid,
-                         acceptednameusageid,
-                         taxonomicstatus,
-                         taxonrank)]
-  
-  # Use the acceptedID when parentNameUsageID is empty 
-  wcvp_lookup[parentnameusageid == "", parentnameusageid := acceptednameusageid]
-  
-  # Get parent names for infraspecific taxa
-  wcvp_parents <- wcvp_dt[taxonid %in% wcvp_lookup[!is.na(parentnameusageid) & 
-                                                        parentnameusageid != ""]$parentnameusageid,
-                        .(taxonid, 
-                          parent_scientificName = scientfiicname,
-                          parent_scientificNameAuthorship = scientfiicnameauthorship)]
-  
-  wcvp_lookup <- dplyr::left_join(wcvp_lookup, wcvp_parents,
-                                 by = c("parentnameusageid" = "taxonid"))
-  
-  # Deal with synonyms that caused new accepted names to have subsp./var./f.
-  get_these1 <- which(grepl(" var\\. | subsp\\. | f\\. | fo\\. ", 
-                            wcvp_lookup$parent_scientificName,
-                            perl = TRUE))
-  
-  # Only process problematic cases if they exist
-  if(length(get_these1) > 0) {
-    # wfo_lookup$parent_scientificName[get_these1]
+  # Create a lookup table - ONLY RUN IF THERE ARE INFRASPECIFIC NAMES
+  if(length(infraspecific_names) > 0) {
+    wcvp_lookup <- wcvp_dt[scientfiicname %in% infraspecific_names, 
+                           .(scientfiicname, 
+                             scientfiicnameauthorship,
+                             parentnameusageid,
+                             acceptednameusageid,
+                             taxonomicstatus,
+                             taxonrank)]
+    
+    # Use the acceptedID when parentNameUsageID is empty 
+    wcvp_lookup[parentnameusageid == "", parentnameusageid := acceptednameusageid]
+    
+    # Get parent names for infraspecific taxa
+    wcvp_parents <- wcvp_dt[taxonid %in% wcvp_lookup[!is.na(parentnameusageid) & 
+                                                       parentnameusageid != ""]$parentnameusageid,
+                            .(taxonid, 
+                              parent_scientificName = scientfiicname,
+                              parent_scientificNameAuthorship = scientfiicnameauthorship)]
+    
+    wcvp_lookup <- dplyr::left_join(wcvp_lookup, wcvp_parents,
+                                    by = c("parentnameusageid" = "taxonid"))
     
     # Deal with synonyms that caused new accepted names to have subsp./var./f.
     get_these1 <- which(grepl(" var\\. | subsp\\. | f\\. | fo\\. ", 
                               wcvp_lookup$parent_scientificName,
                               perl = TRUE))
     
-    # Get the parent IDs for these problematic cases
-    problem_parent_ids <- wcvp_lookup$parentnameusageid[get_these1]
-    
-    # Get the parents of these problematic parents (the next level up)
-    higher_parents <- wcvp_dt[taxonid %in% wcvp_dt[taxonid %in% problem_parent_ids]$parentnameusageid,
-                             .(taxonid,
-                               parent_scientificName_fixed = scientfiicname,
-                               parent_scientificNameAuthorship_fixed = scientfiicnameauthorship)]
-    
-    # Get the mapping of which original parent ID maps to which higher parent
-    parent_mapping <- wcvp_dt[taxonid %in% problem_parent_ids,
-                             .(original_parent_id = taxonid,
-                               higher_parent_id = parentnameusageid)]
-    
-    # Join to get the fixed names
-    parent_mapping <- dplyr::left_join(parent_mapping, higher_parents,
-                                       by = c("higher_parent_id" = "taxonid"))
-    
-    # Update wcvp_lookup
-    for(k in seq_along(get_these1)) {
-      row_idx <- get_these1[k]
-      original_parent_id <- wcvp_lookup$parentnameusageid[row_idx]
+    # Only process problematic cases if they exist
+    if(length(get_these1) > 0) {
+      # wfo_lookup$parent_scientificName[get_these1]
       
-      match_idx <- which(parent_mapping$original_parent_id == original_parent_id)
+      # Deal with synonyms that caused new accepted names to have subsp./var./f.
+      get_these1 <- which(grepl(" var\\. | subsp\\. | f\\. | fo\\. ", 
+                                wcvp_lookup$parent_scientificName,
+                                perl = TRUE))
       
-      if(length(match_idx) > 0) {
-        wcvp_lookup$parent_scientificName[row_idx] <- parent_mapping$parent_scientificName_fixed[match_idx]
-        wcvp_lookup$parent_scientificNameAuthorship[row_idx] <- parent_mapping$parent_scientificNameAuthorship_fixed[match_idx]
+      # Get the parent IDs for these problematic cases
+      problem_parent_ids <- wcvp_lookup$parentnameusageid[get_these1]
+      
+      # Get the parents of these problematic parents (the next level up)
+      higher_parents <- wcvp_dt[taxonid %in% wcvp_dt[taxonid %in% problem_parent_ids]$parentnameusageid,
+                                .(taxonid,
+                                  parent_scientificName_fixed = scientfiicname,
+                                  parent_scientificNameAuthorship_fixed = scientfiicnameauthorship)]
+      
+      # Get the mapping of which original parent ID maps to which higher parent
+      parent_mapping <- wcvp_dt[taxonid %in% problem_parent_ids,
+                                .(original_parent_id = taxonid,
+                                  higher_parent_id = parentnameusageid)]
+      
+      # Join to get the fixed names
+      parent_mapping <- dplyr::left_join(parent_mapping, higher_parents,
+                                         by = c("higher_parent_id" = "taxonid"))
+      
+      # Update wcvp_lookup
+      for(k in seq_along(get_these1)) {
+        row_idx <- get_these1[k]
+        original_parent_id <- wcvp_lookup$parentnameusageid[row_idx]
+        
+        match_idx <- which(parent_mapping$original_parent_id == original_parent_id)
+        
+        if(length(match_idx) > 0) {
+          wcvp_lookup$parent_scientificName[row_idx] <- parent_mapping$parent_scientificName_fixed[match_idx]
+          wcvp_lookup$parent_scientificNameAuthorship[row_idx] <- parent_mapping$parent_scientificNameAuthorship_fixed[match_idx]
+        }
       }
     }
+    
+    # When there are duplicates, keep only the accepted
+    wcvp_lookup <- wcvp_lookup[order(taxonomicstatus != "Accepted")]
+    wcvp_lookup <- wcvp_lookup[!duplicated(scientfiicname), ]
+    
+    ##### FINALLY SUBSTITUTE THE NAMES #####
+    
+    # Named vector for quick lookup
+    parent_name_lookup <- setNames(wcvp_lookup$parent_scientificName, wcvp_lookup$scientfiicname)
+    parent_author_lookup <- setNames(wcvp_lookup$parent_scientificNameAuthorship, wcvp_lookup$scientfiicname)
+    
+    # Find matches
+    matches <- family_data$taxonName %in% names(parent_name_lookup)
+    
+    # For rows with matches, update taxonName and taxonAuthor
+    if(sum(matches) > 0) {
+      # Get the matching scientific names
+      matching_names <- family_data$taxonName[matches]
+      # Update taxonName with parent_scientificName
+      family_data$taxonName[matches] <- parent_name_lookup[matching_names]
+      # Update taxonAuthor with parent_scientificNameAuthorship
+      family_data$taxonAuthor[matches] <- parent_author_lookup[matching_names]
+      
+      # Recreate scientificName column
+      family_data$scientificName[matches] <- ifelse(
+        !is.na(family_data$taxonAuthor[matches]) & family_data$taxonAuthor[matches] != "",
+        paste(family_data$taxonName[matches], family_data$taxonAuthor[matches]),
+        family_data$taxonName[matches]
+      )
+    }
+    
+    
+  } else {
+    cat("  No infraspecific names found for WCVP fix in", i, "- skipping\n")
   }
-  
-  # When there are duplicates, keep only the accepted
-  wcvp_lookup <- wcvp_lookup[order(taxonomicstatus != "Accepted")]
-  wcvp_lookup <- wcvp_lookup[!duplicated(scientfiicname), ]
-  
-  ##### FINALLY SUBSTITUTE THE NAMES #####
-  
-  # Named vector for quick lookup
-  parent_name_lookup <- setNames(wcvp_lookup$parent_scientificName, wcvp_lookup$scientfiicname)
-  parent_author_lookup <- setNames(wcvp_lookup$parent_scientificNameAuthorship, wcvp_lookup$scientfiicname)
-  
-  # Find matches
-  matches <- family_data$taxonName %in% names(parent_name_lookup)
-  
-  # For rows with matches, update taxonName and taxonAuthor
-  if(sum(matches) > 0) {
-    # Get the matching scientific names
-    matching_names <- family_data$taxonName[matches]
-    # Update taxonName with parent_scientificName
-    family_data$taxonName[matches] <- parent_name_lookup[matching_names]
-    # Update taxonAuthor with parent_scientificNameAuthorship
-    family_data$taxonAuthor[matches] <- parent_author_lookup[matching_names]
-  }
-  
-  # Recreate scientificName column
-  family_data$scientificName <- ifelse(
-    !is.na(family_data$taxonAuthor) & family_data$taxonAuthor != "",
-    paste(family_data$taxonName, family_data$taxonAuthor),
-    family_data$taxonName
-  )
   
   
 # END OF TAXONOMY FIX -----------------------------------------------------
