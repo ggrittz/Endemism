@@ -307,10 +307,10 @@ for(i in seq_along(cell_metrics_biomes)) {
   cell_metrics_biome <- cell_metrics_biomes[[i]]
   raster_biome <- my_we_raster_biomes[[i]]
   
-  sc_layer <- terra::rast(raster_biome)
-  n_layer <- terra::rast(raster_biome)
-  sobs_layer <- terra::rast(raster_biome)
-  simp_layer <- terra::rast(raster_biome)
+  sc_layer <- terra::rast(raster_biome$we)
+  n_layer <- terra::rast(raster_biome$we)
+  sobs_layer <- terra::rast(raster_biome$we)
+  simp_layer <- terra::rast(raster_biome$we)
   
   terra::values(sc_layer) <- NA
   terra::values(n_layer) <- NA
@@ -325,7 +325,6 @@ for(i in seq_along(cell_metrics_biomes)) {
   raster_biome[["n"]][cell_metrics_biome$cell_id] <- cell_metrics_biome$n
   raster_biome[["S.obs"]][cell_metrics_biome$cell_id] <- cell_metrics_biome$S.obs
   raster_biome[["Simp.obs"]][cell_metrics_biome$cell_id] <- cell_metrics_biome$Simp.obs
-  
   raster_df_biome <- terra::as.data.frame(raster_biome, xy = TRUE, cells = TRUE) 
   raster_df_biomes[[i]] <- raster_df_biome
 }
