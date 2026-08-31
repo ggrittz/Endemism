@@ -7,6 +7,7 @@
 file_path <- here::here("data", "derived-data", "maps")
 file_path1 <- here::here("data", "derived-data", "Cleaned_occs")
 file_path2 <- here::here("data", "derived-data", "Endemic_species")
+file_path3 <- here::here("data", "derived-data", "rds")
 if(!dir.exists(file_path2))
   dir.create(file_path2)
 file_name <- "latamMap_classified.gpkg"
@@ -101,9 +102,8 @@ family_names <- readRDS(file.path(family_names))
 our_names <- readRDS(here::here("data", "derived-data", "checklist_standardized.rds"))
 our_names <- our_names[!duplicated(our_names$our_accepted_scientificName), ]
 
-
-# Get a Realm/EFG for each occurrence -------------------------------------
-# And filter only good registers for weighted endemism --------------------
+# Vouchers from FFB
+vouchers <- readRDS(file.path(file_path3, "ffb_vouchers.rds"))
 
 
 ##### ADDING TAXONOMY FIX HERE #####
@@ -394,7 +394,16 @@ for(i in family_names){
   
 # END OF TAXONOMY FIX -----------------------------------------------------
 
-  
+  # Before keeping only high, see if any of the medium/low are FFB vouchers
+  family_data$voucher_these <- paste(family_data$recordedBy.new,
+                                     family_data$recordNumber.new,
+                                     sep = "_")
+  # If the combo recordedBy.new + recordNumber.new is on vouchers, keep it
+  # as 'high', otherwise do nothing
+  family_data$tax.check1 <- ifelse(family_data$voucher_these %in% 
+                                     vouchers$voucher_these, 
+                                   "high", 
+                                   family_data$tax.check1)
   
   # Keep generalists too (14/10/2025 - I think I am removing them...30/10 removed)
   family_data <- family_data[family_data$tax.check1 %in% "high", ]
