@@ -21,6 +21,8 @@ if(!dir.exists(file_path))
 # families_done <- families_done[!grepl("^$", families_done)]
 # family_names <- setdiff(family_names, families_done)
 
+all_family_summaries <- list()
+
 # Loop through families
 for (i in family_names) {
   cat("Cleaning duplicates for", i, "\n")
@@ -110,9 +112,20 @@ for (i in family_names) {
                                                 tax.check = "tax.check",
                                                 status = "scientificNameStatus"))
   
+  # Count registers per family before deduplication
+  n_registers_before <- nrow(family_data)
+  family_summary <- data.frame(family = i,
+                               n_registers = n_registers_before,
+                               stringsAsFactors = FALSE)
+  
   # Finally, removing duplicates
   family_data <- plantR::rmDup(df = family_data,
                                rm.all = TRUE)
+  
+  # Non dups
+  n_registers_after <- nrow(family_data)
+  family_summary$n_registers_no_dup <- n_registers_after
+  all_family_summaries[[i]] <- family_summary
   
   # id for later usage
   family_data$ids <- paste0(i, "_", 1:nrow(family_data))
@@ -131,3 +144,7 @@ for (i in family_names) {
   # Save as .parquet
   # arrow::write_parquet(family_data, file.path(file_path, i, paste0(i, ".parquet")))
 }
+
+# Bind the family summary and save
+all_summaries_df <- dplyr::bind_rows(all_family_summaries)
+saveRDS(all_summaries_df, file.path(file_path, "family_n_dups.rds"))
