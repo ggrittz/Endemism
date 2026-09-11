@@ -130,6 +130,9 @@ wcvp <- data.table::fread(file.path(raw_path1, "wcvp_taxon.csv"))
 wcvp_dt <- data.table::as.data.table(wcvp)
 rm(wfo, wcvp)
 
+# Store each filtering step
+all_filtering_summaries <- list()
+
 # Do it by family
 for(i in family_names){
   
@@ -143,11 +146,7 @@ for(i in family_names){
   
   family_data <- data.table::fread(gz_path)
   
-  
-
   # START OF TAXONOMY FIX ---------------------------------------------------
-  
-  
   
   ##### I AM ADDING THIS FIX HERE, FOR THE MOMENT #####
   ##### THIS FIX IS GOING TO BE ADDED TO TAXONOMY #####
@@ -392,22 +391,27 @@ for(i in family_names){
   }
   
   
-# END OF TAXONOMY FIX -----------------------------------------------------
-
-  # Before keeping only high, see if any of the medium/low are FFB vouchers
-  family_data$voucher_these <- paste(family_data$recordedBy.new,
-                                     family_data$recordNumber.new,
-                                     sep = "_")
-  # If the combo recordedBy.new + recordNumber.new is on vouchers, keep it
-  # as 'high', otherwise do nothing
-  family_data$tax.check1 <- ifelse(family_data$voucher_these %in% 
-                                     vouchers$voucher_these, 
-                                   "high", 
-                                   family_data$tax.check1)
+  # END OF TAXONOMY FIX -----------------------------------------------------
+  
+  # Initialize filter counts for this family
+  filter_counts <- data.frame(
+    family = i,
+    original_n = NA,
+    first_tax_filter = NA,
+    second_geo_filter = NA,
+    third_loc_filter = NA,
+    fourth_bad_reso_filter = NA,
+    fifth_coord_filter = NA,
+    sixth_cult_filter = NA,
+    seventh_outlier_filter = NA,
+    stringsAsFactors = FALSE
+  )
   
   # Keep generalists too (14/10/2025 - I think I am removing them...30/10 removed)
+  filter_counts$original_n <- nrow(family_data)
   family_data <- family_data[family_data$tax.check1 %in% "high", ]
-
+  filter_counts$first_tax_filter <- nrow(family_data)
+  
   # Get only "trees" lifeForm
   family_data <- dplyr::left_join(family_data, 
                                   our_names[, c("our_accepted_scientificName",
@@ -415,69 +419,63 @@ for(i in family_names){
                                   by = c("scientificName" = "our_accepted_scientificName"))
   family_data <- family_data[grepl("tree", family_data$lifeForm_aggregated), ]
   
-  ##### Removing unusable data #####
   # Geo check: keep only ok_, shore
   family_data <- family_data[grepl("^ok_|shore", 
                                    family_data$geo.check1), ]
-
+  filter_counts$second_geo_filter <- nrow(family_data)
+  
   # Lock check: keep only ok_ or check_local.2municip.
   family_data <- family_data[grepl("^ok_|^check_local.2municip.$",
                                    family_data$loc.check1), ]
+  filter_counts$third_loc_filter <- nrow(family_data)
   
   # Keep registers at state-level if the state is smaller than 12,500 km²
-  # The same rationale is automatically applied to countries...
   family_data <- dplyr::left_join(family_data, latamMap_agg_adm[, c("name", "bad_reso")],
                                   by = c("loc.correct1" = "name"))
   
   # Keep only NA and FALSE on bad_reso
   family_data <- family_data[family_data$bad_reso %in% c(FALSE, NA), ]
+  filter_counts$fourth_bad_reso_filter <- nrow(family_data)
   
   # Coord check: keep only records with coordinates
   family_data <- family_data[grepl("coord_gazet|coord_original", family_data$origin.coord1), ]
+  filter_counts$fifth_coord_filter <- nrow(family_data)
   
-  # Cult check: keep only non-cultivated registers (make this better before: taxonomic list)
+  # Cult check: keep only non-cultivated registers
   family_data <- family_data[!family_data$cult.check %in% c("cultivated", "prob_cultivated"), ]
+  filter_counts$sixth_cult_filter <- nrow(family_data)
   
   # Outliers and distribution check: remove bad_dist and out.check is TRUE
-  # We only remove a register if it falls outside of its indicated botanical country
-  # <AND> is a spatial outlier
-  # Converting D² distances to probabilities using the Chi-square dist.
-  # degrees of freedom == 2 since we have two-dimensions (lon/lat)
   df <- 2
-  alpha <- 0.025 # using 2.5% here as p-value threshold
+  alpha <- 0.025
   critVal <- qchisq(p = 1 - alpha, df = df)
   family_data$chisq.out.robust <- family_data$maha.robust > critVal
-  # Also dealing with introduced species now
   family_data <- family_data[(!family_data$dist.check %in% c("bad_dist", "introduced") &
-                                # !family_data$out.check %in% TRUE &
-                                # family_data$maha.classic <= 2.5 &
                                 !family_data$chisq.out.robust %in% TRUE), ]
   
-  # Cases where there is no possible indication of outlier (not enough unique points)
-  # we filter the data using only the locations that are ok_dist
+  # Cases where there is no possible indication of outlier
   family_data <- family_data[!(is.na(family_data$out.check) & 
                                  family_data$dist.check %in% "bad_dist"), ]
+  filter_counts$seventh_outlier_filter <- nrow(family_data)
   
+  # Add this family's summary to the list
+  all_filtering_summaries[[i]] <- filter_counts
+  
+  # Continue with the rest of the code (coordinate conversion, map intersections, etc.)
   # Convert coordinate character columns to numeric
   family_data$decimalLatitude.new1 <- as.numeric(family_data$decimalLatitude.new1)
   family_data$decimalLongitude.new1 <- as.numeric(family_data$decimalLongitude.new1)
   
   # Cross-check the register with original coordinates against the maps
   with_coord_orig <- which(family_data$origin.coord1 %in% "coord_original")
-  # Convert to SpatVect
   family_data_coord_orig <- terra::vect(family_data[with_coord_orig, ],
-                                   geom = c("decimalLongitude.new1",
-                                            "decimalLatitude.new1"),
-                                   crs = "epsg:4326")
+                                        geom = c("decimalLongitude.new1",
+                                                 "decimalLatitude.new1"),
+                                        crs = "epsg:4326")
   
-  # Cross with Neotropical map and EFG map
-  # Neotropical
-  # Need to use a buffer to get points close to the border due to mismatch
-  # between gazetteer coordinates and maps (brazil_para_belem falls in water)
   family_data_coord_orig$is_nt <- terra::is.related(x = family_data_coord_orig,
                                                     y = tropical_america,
                                                     "intersects")
-  # EFGs
   family_data_coord_orig_efgs <- terra::intersect(x = family_data_coord_orig,
                                                   y = efgs)
   
@@ -488,113 +486,85 @@ for(i in family_names){
     next
   }
   
-  # df for merging both of them
   family_data_coord_orig_df <- terra::as.data.frame(family_data_coord_orig, geom = "XY")
   family_data_coord_orig_efgs <- terra::as.data.frame(family_data_coord_orig_efgs, geom = "XY")
   
-  # Duplicate cases of a point being at two efgs...minor shapefile issue here
   dup_ids <- family_data_coord_orig_efgs$ids[duplicated(family_data_coord_orig_efgs$ids) | 
                                                duplicated(family_data_coord_orig_efgs$ids, 
                                                           fromLast = TRUE)]
-  # Removing the register from both EFGs to not randomly inflate
   family_data_coord_orig_efgs <- family_data_coord_orig_efgs[!family_data_coord_orig_efgs$ids %in% dup_ids, ]
   
-  # merge and retain the NAs too
   result_df_orig <- dplyr::left_join(x = family_data_coord_orig_df,
                                      y = family_data_coord_orig_efgs[, c("ids", "our_efg")],
                                      by = "ids")
   
-  # Now, simply merge coord_gazet with latamMap info
   with_coord_gazet <- which(family_data$origin.coord1 %in% "coord_gazet")
   result_df_gazet <- dplyr::left_join(x = family_data[with_coord_gazet, ],
                                       y = gaz_efg[, c("loc.correc", "our_efg")],
                                       by = c("loc.correct1" = "loc.correc"))
   result_df_gazet <- result_df_gazet[!duplicated(result_df_gazet$ids), ]
-  # The same for Neotropics
   result_df_gazet <- dplyr::left_join(result_df_gazet,
                                       gaz_nt[, c("loc.correc", "is_nt")],
                                       by = c("loc.correct1" = "loc.correc"))
   result_df_gazet <- result_df_gazet[!duplicated(result_df_gazet$ids), ]
   
-  # Merge back with original data:
   to_merge <- rbind.data.frame(result_df_orig[, c("ids", "our_efg", "is_nt")],
                                result_df_gazet[, c("ids", "our_efg", "is_nt")])
   family_data <- dplyr::left_join(family_data, to_merge, by = "ids")
   
-  ##### RELEVANT: cases where we have a shapefile, we can assign an area for
-  # each adm level and consider transition/predominant regarding Neotropics and
-  # each biome
-  #####
   # Is the realm transitional or predominant?
-  # Transitional?
   latam_gaz_trans <- latam_gaz[grepl("^Transition", latam_gaz$Morrone_re_new), ]
   get_these <- which(family_data$loc.correct1 %in% latam_gaz_trans$loc_gaz)
   family_data$is_realm_transitional <- FALSE
   family_data$is_realm_transitional[get_these] <- TRUE
-  # Predominant?
+  
   latam_gaz_pred <- latam_gaz[grepl("predominant$", latam_gaz$Morrone_re_new), ]
   get_these <- which(family_data$loc.correct1 %in% latam_gaz_pred$loc_gaz)
   family_data$is_realm_predominant <- FALSE
   family_data$is_realm_predominant[get_these] <- TRUE
   
-  ##### Doing the same for biomes #####
+  # Doing the same for biomes
   latam_gaz_trans <- latam_gaz[grepl("^Transition", latam_gaz$our_efg_new), ]
   get_these <- which(family_data$loc.correct1 %in% latam_gaz_trans$loc_gaz)
   family_data$is_biome_transitional <- FALSE
   family_data$is_biome_transitional[get_these] <- TRUE
-  # Predominant?
+  
   latam_gaz_trans <- latam_gaz[grepl("predominant$", latam_gaz$our_efg_new), ]
   get_these <- which(family_data$loc.correct1 %in% latam_gaz_trans$loc_gaz)
   family_data$is_biome_predominant <- FALSE
   family_data$is_biome_predominant[get_these] <- TRUE
   
-  ##### For still NA cases, get the info from gazetteer objects #####
+  # For still NA cases, get the info from gazetteer objects
   which_na <- which(is.na(family_data$our_efg))
-  # Create a lookup vector from gaz (loc.correct -> our_efg)
   gaz_lookup <- setNames(gaz_efg$our_efg, gaz_efg$loc.correc)
-  # Fill NAs by matching loc.correct values
   family_data$our_efg[which_na] <- gaz_lookup[family_data$loc.correct1[which_na]]
   
-  # Do the same for the Neotropics gaz
   which_na <- which(is.na(family_data$is_nt))
   gaz_lookup <- setNames(gaz_nt$is_nt, gaz_nt$loc.correc)
   family_data$is_nt[which_na] <- gaz_lookup[family_data$loc.correct1[which_na]]
   
-  # Remove non-Neotropical endemic species ----------------------------------
-  
-  # 90% rule for now
+  # Remove non-Neotropical endemic species
   tab <- table(family_data$scientificName, family_data$is_nt, useNA = 'ifany')
   percent_true <- tab[, "TRUE"] / rowSums(tab, na.rm = FALSE) * 100
   percent_true[is.na(percent_true)] <- 0
   true_percent <- percent_true
-
-  # Get names where ≥ 90% occurrences are within the Neotropics
-  keep_species <- names(true_percent)[true_percent >= 90]
-  # family_data <- family_data[family_data$scientificName %in% keep_species, ]
-  ##### Also remove occurrences outside of the Neotropics or keep them? #####
-  ##### Ofc, remove AFTER classifying as Neotropical #####
+  
   family_data$is_nt_endemic <- family_data$scientificName %in% names(true_percent)[true_percent >= 90]
   
-  # Calculate endemism per EFG (if >= 90% occurrences inside a single EFG, then
-  # the species is endemic to it)
+  # Calculate endemism per EFG
   family_data$efg_endemic <- NA
   species_list <- sort(unique(family_data$scientificName))
   
   for (j in species_list) {
-
     species_data <- family_data[family_data$scientificName %in% j, ]
     efg_counts <- table(species_data$our_efg)
     max_percent <- max(efg_counts) / sum(efg_counts) * 100
     
-    # If ≥ 90%, assign the dominant EFG
     if (max_percent >= 90) {
       dominant_efg <- names(efg_counts)[which.max(efg_counts)]
       family_data$efg_endemic[family_data$scientificName %in% j] <- dominant_efg
     }
   }
-  
-  # Drop ids column and save
-  # family_data$ids <- NULL
   
   # Saving by family 
   plantR::saveData(family_data,
@@ -605,4 +575,12 @@ for(i in family_names){
                    compress = TRUE)
   
 }
+
+# Bind all summaries together after the loop
+all_filtering_summaries_df <- dplyr::bind_rows(all_filtering_summaries)
+
+# Save the combined summary
+saveRDS(all_filtering_summaries_df, 
+        file.path(file_path2, "family_n_filters.rds"))
+
 
