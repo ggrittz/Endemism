@@ -60,6 +60,10 @@ tropical_america <- america[america$Morrone_re %in% "Neotropical", ]
 tropical_america$our_efg <- gsub("Tropical alpine grasslands and shrublands",
                                  "Tropical alpine grasslands and herbfields",
                                  tropical_america$our_efg)
+
+##### THERE IS A NEW NAME TO CHANGE CHECK IUCN TYPOLOGY #####
+
+
 # GET codes from IUCN
 getCodes <- c("T5.4", "T5.5", "MFT1.2", "T2.3", "T4.2", "TF1.4", "T3.2",
               "T3.1", "T6.4", "T4.5", "T4.4", "T5.2", "T6.5", "TF1.1",
@@ -650,6 +654,10 @@ sum(intersection1$intersected_area_km2)
 # Proportion of PA areas covering critical centers
 100 * (sum(intersection1$intersected_area_km2) / sum(th_we_bin_area))
 # 14.66%
+
+# How much of tropical America is protected in %?
+100 * (terra::expanse(wdpa_data, 'km') / 
+         terra::expanse(tropical_america_diss, 'km')) # 7.35%
 
 ##### How about tropical American ecoregions inside each top 90th? #####
 er <- terra::vect(here::here("data", "derived-data", "maps", "NTAmericas_ecoregions.shp"))
