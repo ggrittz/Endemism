@@ -22,12 +22,22 @@ devtools::load_all(here::here())
 
 ## Global Variables ----
 
-# You can list global variables here (or in a separate R script)
+# Google authentication (token cached in .secrets)
+options(gargle_oauth_cache = ".secrets")
+googlesheets4::gs4_auth(cache = ".secrets",
+                        email = "ggrittz@usp.br",
+                        scopes = "https://www.googleapis.com/auth/spreadsheets.readonly")
 
 
 ## Run Project ----
 
-# List all R scripts in a sequential order and using the following form:
+# Ecoregion -> IUCN EFG classification (sts_ecoregion_efg_conversionTable_Morrone2022)
+sts_class <- googlesheets4::read_sheet("1G19dSMno_AuRRV7QCBRe9bza8kQIW88Mvk8BO6Y9LBI",
+                                       sheet = "Sheet1", col_types = "c")
+writexl::write_xlsx(sts_class, here::here("data", "derived-data", "maps",
+                                          "final_classification.xlsx"))
+rm(sts_class)
+
 source(here::here("analyses", "01_prepare_gbif_data.R"))
 source(here::here("analyses", "01_prepare_jabot_data.R"))
 source(here::here("analyses", "01_prepare_reflora_data.R"))
