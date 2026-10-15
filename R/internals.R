@@ -180,7 +180,7 @@ cell_coverage <- function(species, perms = 100, base.n = 5, base.richness = 5) {
   s_obs <- length(unique(species))
   
   if (n < base.n || s_obs < base.richness) {
-    return(c(N = as.numeric(n), 
+    return(list(N = as.numeric(n), 
              S_obs = as.numeric(s_obs), 
              S_pred = NA_real_, 
              completeness = NA_real_, 
@@ -243,7 +243,7 @@ cell_coverage <- function(species, perms = 100, base.n = 5, base.richness = 5) {
   fits <- fits[!sapply(fits, is.null)]
   
   if (length(fits) == 0) {
-    return(c(N = as.numeric(n), 
+    return(list(N = as.numeric(n), 
              S_obs = as.numeric(s_obs), 
              S_pred = NA_real_, 
              completeness = NA_real_, 
@@ -293,7 +293,8 @@ cell_coverage <- function(species, perms = 100, base.n = 5, base.richness = 5) {
   completeness <- 100 * s_obs / s_pred
   completeness <- min(100, completeness)
   
-  result <- c(N = as.numeric(n), 
+  # A list keeps each value with its own type (c() would turn all into character)
+  result <- list(N = as.numeric(n), 
               S_obs = as.numeric(s_obs), 
               S_pred = as.numeric(s_pred),
               completeness = as.numeric(completeness), 
