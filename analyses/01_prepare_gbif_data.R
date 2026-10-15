@@ -9,7 +9,7 @@ family_names <- here::here("data", "derived-data", "family_names.rds")
 family_names <- readRDS(file.path(family_names))
 
 # Loading our taxonomy to fix the names
-our_names <- readRDS(file.path(here::here("data", "derived-data", "checklist_standardized.rds")))
+our_names <- readRDS(file.path(here::here("data", "derived-data", "checklist_species_level.rds")))
 
 # Remove families already prepared, if any
 # families_done <- list.dirs(here::here("data", "derived-data", "GBIF_occ"), 
@@ -28,22 +28,45 @@ worldMap <- plantR::worldMap
 # Loading internal functions
 devtools::load_all()
 
+##### Fix plantR's collection codes table (run once, before the loop) #####
+# plantR:::collectionCodes has duplicated keys (e.g. "POL_POL"), which makes
+# getCode() duplicate rows in its merge -> row-count mismatch in cbind
+cc <- plantR:::collectionCodes
+cc <- cc[order(!is.na(cc$col.OBS)), ]            # prefer proper IH entries
+cc <- cc[!duplicated(cc$collection.string), ]
+utils::assignInNamespace("collectionCodes", cc, ns = "plantR")
+rm(cc)
+
+# Country and state names from the plantR gazetteer written differently in the
+# WGSRPD table used by plantR::checkDist (reported to plantR); used only to build
+# a temporary location column for checkDist below
+loc_alias <- read.csv(here::here("data", "derived-data", "plantR_loc_alias.csv"))
+loc_alias <- setNames(loc_alias$taxon.distribution.bru, loc_alias$loc)
+
 # Preparing GBIF data -----------------------------------------------------
-# a = which(family_names %in% "Chloranthaceae")
-# family_names <- family_names[a:length(family_names)]
-for(i in family_names){
+# GBIF data
+# file_path2 <- "D:/gbif_occurrences.txt"
+file_path2 <- "C:/Users/ggrittz/Desktop/data/gbif_data/filtered_occurrence.txt"
+
+# Loop over the families as written in the GBIF file (column $18), since GBIF
+# families may differ from our accepted families; records are saved by our
+# accepted family below, and 02 searches all folders for each accepted family
+gbif_families <- unique(data.table::fread(file_path2, select = "family", quote = "")$family)
+gbif_families <- sort(gbif_families[!gbif_families %in% c("", NA)])
+
+# a = which(gbif_families %in% "Chloranthaceae")
+# gbif_families <- gbif_families[a:length(gbif_families)]
+for(i in gbif_families){
 
   cat("Preparing", i, "\n")
-  
-  # GBIF data
-  file_path2 <- "D:/gbif_occurrences.txt"
+
   # Prepare the header first
   header <- readLines(file_path2, n = 1)
   # Split the header into column names
   header <- unlist(strsplit(header, "\t"))
   
-  # Load each family separately (family is column $36)
-  gbif_data <- data.table::fread(cmd = paste("awk -F'\t' '$36 == \"", i, "\"'", " ", 
+  # Load each family separately (family is column $18)
+  gbif_data <- data.table::fread(cmd = paste("awk -F'\t' '$18 == \"", i, "\"'", " ", 
                                              file_path2, sep = ""), quote = "")
   
   # If data loaded is NULL or has no rows
@@ -216,11 +239,23 @@ for(i in family_names){
                                   keep.values = TRUE)
     
     # Validating records that are falling outside of the species' indicated botanical country
-    gbif_data <- my_checkDist(x = gbif_data,
-                                   tax.name = "taxonName",
-                                   tax.author = "taxonAuthor",
-                                   loc = "loc.correct",
-                                   source = "wcvp")
+    # Temporary location column with country/state names as written in WGSRPD
+    loc_state <- sub("^([^_]*_[^_]*).*", "\\1", gbif_data$loc.correct)
+    fix_these <- grepl("_", loc_state) & loc_state %in% names(loc_alias)
+    gbif_data$loc.dist <- gbif_data$loc.correct
+    gbif_data$loc.dist[fix_these] <- paste0(sub("_.*", "_", loc_state[fix_these]),
+                                      loc_alias[loc_state[fix_these]],
+                                      sub("^[^_]*_[^_]*", "", gbif_data$loc.correct[fix_these]))
+    loc_country <- sub("_.*", "", gbif_data$loc.dist)
+    fix_these <- loc_country %in% names(loc_alias)
+    gbif_data$loc.dist[fix_these] <- paste0(loc_alias[loc_country[fix_these]],
+                                      sub("^[^_]*", "", gbif_data$loc.dist[fix_these]))
+    gbif_data <- plantR::checkDist(x = gbif_data,
+                              tax.name = "taxonName",
+                              tax.author = "taxonAuthor",
+                              loc = "loc.dist",
+                              source = "wcvp")
+    gbif_data$loc.dist <- NULL
     
     # Validating confidence level of species determinators
     gbif_data <- plantR::validateTax(gbif_data, kingdom = "plantae", 
