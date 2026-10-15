@@ -60,22 +60,22 @@ centroids <- terra::centroids(other_dis)
 coords <- terra::crds(centroids)
 
 # Classify based on latitude (y-coordinate)
-other_dis$Morrone_region <- ifelse(coords[, "y"] >= 0, "Palearctic", "Neotropical_temperate")
+other_dis$Morrone_region <- ifelse(coords[, "y"] >= 0, "Nearctic", "Neotropical_temperate")
 # Aggregate back based on region
 other_dis <- terra::buffer(other_dis, 0)
 other_dis <- terra::aggregate(other_dis, by = "Morrone_region", dissolve = TRUE, cores = 8)
 other_dis <- other_dis[, -which(names(other_dis) == "agg_n")]
 
-# Now separate finally into Palearctic and below Neotropics
-paleartic <- other_dis[other_dis$Morrone_region %in% "Palearctic", ]
+# Now separate finally into Nearctic and below Neotropics
+nearctic <- other_dis[other_dis$Morrone_region %in% "Nearctic", ]
 below_nt <- other_dis[other_dis$Morrone_region %in% "Neotropical_temperate", ]
 
 # Test
 # terra::plot(nt_dis, col = 'green')
-# terra::plot(paleartic, col = 'red', add = T)
+# terra::plot(nearctic, col = 'red', add = T)
 # terra::plot(below_nt, col = 'blue', add = T)
 # Bind it into a single shapefile
-nt_complete <- rbind(nt_dis, paleartic, below_nt)
+nt_complete <- rbind(nt_dis, nearctic, below_nt)
 
 # Crop the global Ecoregions into the Neotropical realm extent
 er_final1 <- terra::crop(er, terra::ext(nt_complete))
@@ -85,10 +85,10 @@ er_final1 <- terra::intersect(er_final1, nt_complete)
 ##### There is a shapefile issue with Morrone or Ecoregions, so we need to manually remove #####
 ##### the Atacama desert and Central Andean dry puna portions (bad lines) that have no geometry #####
 ##### after the intersection with Morrone's map #####
-er_final1 <- er_final1[-which(er_final1$ECO_NAME %in% "Atacama desert" & 
-                         er_final1$Morrone_region %in% "Neotropical_temperate"), ]
-er_final1 <- er_final1[-which(er_final1$ECO_NAME %in% "Central Andean dry puna" & 
-                                er_final1$Morrone_region %in% "Neotropical_temperate"), ]
+er_final1 <- er_final1[!(er_final1$ECO_NAME %in% "Atacama desert" & 
+                          er_final1$Morrone_region %in% "Neotropical_temperate"), ]
+er_final1 <- er_final1[!(er_final1$ECO_NAME %in% "Central Andean dry puna" & 
+                          er_final1$Morrone_region %in% "Neotropical_temperate"), ]
 
 # Do the same for Nearctic and Antarctic
 # er_final2 <- terra::crop(er, terra::ext(other_dis))
@@ -103,6 +103,9 @@ sts_class <- readxl::read_xlsx(here::here("data", "derived-data", "maps",
 # Remove latin before merging
 er_final1$to_merge <- plantR::rmLatin(er_final1$ECO_NAME)
 sts_class$to_merge <- plantR::rmLatin(sts_class$ECO_NAME)
+# Final EFG decision (final_decision_efg); saved in the "our_efg" field because
+# shapefile field names are cut at 10 characters and 06-10 read "our_efg"
+sts_class$our_efg <- sts_class$final_decision_efg
 efg_map <- terra::as.data.frame(er_final1, geom = "WKT")
 efg_map <- dplyr::left_join(efg_map, 
                            sts_class[, c("to_merge", "our_efg")],
@@ -144,8 +147,8 @@ efg_map_neo <- terra::aggregate(efg_map1[efg_map1$Morrone_region %in% "Neotropic
                                dissolve = TRUE, 
                                cores = 8,
                                count = FALSE)
-# Palearctic
-efg_map_pal <- terra::aggregate(efg_map1[efg_map1$Morrone_region %in% "Palearctic", ],
+# Nearctic
+efg_map_pal <- terra::aggregate(efg_map1[efg_map1$Morrone_region %in% "Nearctic", ],
                                by = "our_efg", 
                                dissolve = TRUE, 
                                cores = 8,
