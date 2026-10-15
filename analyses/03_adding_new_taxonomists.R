@@ -35,7 +35,7 @@ for (i in family_names) {
     next
   }
   
-  if (all(family_data$tax.check1 == "high")) {
+  if (all(family_data$tax.check1 %in% "high")) {
     next
   } else {
     # non.tax.det <- family_data[family_data$basisOfRecord %in% c("PRESERVED_SPECIMEN", 

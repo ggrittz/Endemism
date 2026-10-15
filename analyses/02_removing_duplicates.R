@@ -12,16 +12,19 @@ sources <- list.files(search_path, pattern = "_occ$", full.names = TRUE)
 
 # Create the folder to save all cleaned
 file_path <- here::here("data", "derived-data", "Cleaned_occs")
-if(!dir.exists(file_path))
-  dir.create(file_path)
+# Start from an empty folder so no old family files survive a new run
+unlink(file_path, recursive = TRUE)
+dir.create(file_path)
+
+# Log with the number of registers per family after each step (shared with 07)
+# Lines are appended per family, so counts survive a crash or a partial re-run
+log_file <- here::here("outputs", "n_registers_log.txt")
 
 # Remove previously cleaned families
-# families_done <- list.dirs(here::here("data", "derived-data", "Cleaned_occs"), 
+# families_done <- list.dirs(here::here("data", "derived-data", "Cleaned_occs"),
 #                           full.names = FALSE)
 # families_done <- families_done[!grepl("^$", families_done)]
 # family_names <- setdiff(family_names, families_done)
-
-all_family_summaries <- list()
 
 # Loop through families
 for (i in family_names) {
@@ -61,9 +64,13 @@ for (i in family_names) {
     family_data <- NULL
   }
   
-  if(nrow(family_data) == 0 || is.null(family_data)){
+  if(is.null(family_data) || nrow(family_data) == 0){
     cat("Skipping", " ", i, ":", " no registers found\n", sep = "")
     dir.create(file.path(file_path, i), showWarnings = FALSE)
+    data.table::fwrite(data.frame(family = i,
+                                  step = c("before_dup", "after_dup"),
+                                  n_registers = 0),
+                       log_file, append = TRUE, sep = "\t")
     next
   }
   
@@ -74,6 +81,9 @@ for (i in family_names) {
   #to_remove <- c("datelastmodified", "scientificname_full",
   #               "scientificName.1", "gbifID")
   #family_data <- family_data[, -which(colnames(family_data) %in% to_remove)]
+  
+  # Count registers per family before deduplication
+  n_registers_before <- nrow(family_data)
   
   # Start processing the duplicates -----------------------------------------
   
@@ -89,9 +99,9 @@ for (i in family_names) {
                                         col.number = "recordNumber.new",
                                         col.loc = "municipality.new",
                                         col.year = "year.new"),
-                          comb.fields = list(c("family", "col.last.name", "col.number", "col.loc"), 
-                                             c("family", "col.year", "col.number", "col.loc"), 
-                                             c("species", "col.last.name", "col.number", "col.year"), 
+                          comb.fields = list(c("family", "col.last.name", "col.number", "col.loc"),
+                                             c("family", "col.year", "col.number", "col.loc"),
+                                             c("species", "col.last.name", "col.number", "col.year"),
                                              c("col.year", "col.last.name", "col.number", "col.loc")))
   
   # Finding duplicates from the strings
@@ -112,20 +122,15 @@ for (i in family_names) {
                                                 tax.check = "tax.check",
                                                 status = "scientificNameStatus"))
   
-  # Count registers per family before deduplication
-  n_registers_before <- nrow(family_data)
-  family_summary <- data.frame(family = i,
-                               n_registers = n_registers_before,
-                               stringsAsFactors = FALSE)
-  
   # Finally, removing duplicates
   family_data <- plantR::rmDup(df = family_data,
                                rm.all = TRUE)
   
-  # Non dups
-  n_registers_after <- nrow(family_data)
-  family_summary$n_registers_no_dup <- n_registers_after
-  all_family_summaries[[i]] <- family_summary
+  # Append this family's counts to the log
+  data.table::fwrite(data.frame(family = i,
+                                step = c("before_dup", "after_dup"),
+                                n_registers = c(n_registers_before, nrow(family_data))),
+                     log_file, append = TRUE, sep = "\t")
   
   # id for later usage
   family_data$ids <- paste0(i, "_", 1:nrow(family_data))
@@ -140,11 +145,11 @@ for (i in family_names) {
                    compress = TRUE)
   
   # Save as .gz.csv
-  data.table::fwrite(family_data, file.path(file_path, i, paste0(i, ".csv.gz")))
+  # data.table::fwrite(family_data, file.path(file_path, i, paste0(i, ".csv.gz")))
   # Save as .parquet
   # arrow::write_parquet(family_data, file.path(file_path, i, paste0(i, ".parquet")))
 }
 
-# Bind the family summary and save
-all_summaries_df <- dplyr::bind_rows(all_family_summaries)
-saveRDS(all_summaries_df, file.path(file_path, "family_n_dups.rds"))
+# Reading the log later (keeps the most recent line when a family was re-run)
+# n_log <- data.table::fread(here::here("outputs", "n_registers_log.txt"))
+# n_log <- n_log[!duplicated(n_log[, c("family", "step")], fromLast = TRUE), ]

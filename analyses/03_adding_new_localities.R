@@ -17,7 +17,7 @@ link <- "https://docs.google.com/spreadsheets/d/"
 link1 <- "1qOyD7qDzgqEz6Xdbf5GcrjDChjJbJApfWk_P4pgCOAg/edit?gid=1266085842#gid=1266085842"
 gaz <- as.data.frame(googlesheets4::read_sheet(paste0(link, link1)))
 # Load families
-# family_names <- readRDS(here::here("data", "derived-data", "family_names.rds"))
+family_names <- readRDS(here::here("data", "derived-data", "family_names.rds"))
 
 # Only ok here? Last time I used everything (22/09)
 # gaz <- gaz[gaz$status %in% "ok", ]
@@ -93,7 +93,8 @@ loc_new_table <- loc_new_table[loc_new_table$Freq >= 100, ]
 # Country
 loc_new_table <- loc_new_table[!tolower(loc_new_table$Var1) %in% tolower(gaz$NAME_0), ]
 # State
-loc_new_table <- loc_new_table[!tolower(loc_new_table$Var1) %in% tolower(gaz$NAME_1), ]
+loc_new_table <- loc_new_table[!tolower(loc_new_table$Var1) %in%
+                                 tolower(paste(gaz$NAME_0, gaz$NAME_1, sep = "_")), ]
 # Remove numbers that indicate a distance from x place, but not a precise locality
 # loc_new_table$Var1 <- gsub("[0-9]", "", loc_new_table$Var1)
 # loc_new_table <- loc_new_table[!loc_new_table$Var1 %in% "", ]
@@ -146,10 +147,10 @@ names(loc_list)[names(loc_list) == "Freq"] <- "status"
 loc_list$status <- as.character(loc_list$status)
 
 # Bind with plantR's gaz and save
+file_path2 <- here::here("data", "derived-data")
 file_name3 <- "editted_gaz_new_fixLoc.xlsx"
 gaz1 <- dplyr::bind_rows(gaz, loc_list)
 writexl::write_xlsx(gaz1, file.path(file_path2, file_name3))
-rm(list=ls())
 
 
 ##### NOS NOVOS #####

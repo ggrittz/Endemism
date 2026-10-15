@@ -13,7 +13,7 @@ family_names <- readRDS(file.path(family_names))
 # family_names <- toupper(family_names)
 
 # Loading our taxonomy to fix the names
-our_names <- readRDS(file.path(here::here("data", "derived-data", "checklist_standardized.rds")))
+our_names <- readRDS(file.path(here::here("data", "derived-data", "checklist_species_level.rds")))
 
 # Pre-loading objects that will be needed in the pipeline below
 islandsBuff <- plantR::islandsBuff
@@ -24,58 +24,73 @@ world <- plantR::world
 worldMap <- plantR::worldMap
 
 
-# ##### Already performed #####
-# # Loading data
+##### Already performed #####
+# Loading data
 # file_path2 <- "D:/jabot_occurrences.txt"
-# jabot_data <- as.data.frame(data.table::fread(file_path2))
-# 
-# ##### Already performed #####
-# # Filter only species
-# jabot_data <- jabot_data[!is.na(jabot_data$specificEpithet), ]
-# # Separate canonical and author names
-# jabot_data1 <- plantR::fixAuthors(jabot_data$scientificName)
-# # Substitute back
-# jabot_data$scientificName <- jabot_data1$tax.name
-# jabot_data$scientificNameAuthorship <- jabot_data1$tax.author
-# # Make family names Upper-lowercase (all caps in JABOT)
-# jabot_data$family <- gsub("(\\w)(\\w*)", "\\U\\1\\L\\2", jabot_data$family, perl = TRUE)
-# # Make full name
-# jabot_data$scientificNameFull <- plantR:::buildName(jabot_data,
-#                                                     col.names = c("scientificName",
-#                                                                   "scientificNameAuthorship"))
-# # Keep only names found in our list of names
-# jabot_data <- jabot_data[jabot_data$scientificNameFull %in% 
-#                            our_names$input_full_name, ]
-# 
-# # Get taxonomic info from our list of name
-# # Match and substitute the jabot name by our checklist name, already manually checked
-# match_indices <- match(jabot_data$scientificNameFull, our_names$input_full_name)
-# jabot_data$scientificName <- our_names$our_accepted_scientificName[match_indices]
-# jabot_data$family <- our_names$our_accepted_taxonFamily[match_indices]
-# jabot_data$taxonAuthor <- our_names$our_accepted_taxonAuthorship[match_indices]
-# jabot_data$taxonName <- our_names$our_accepted_taxonName[match_indices]
-# 
-# # Make scientificNameStatus
-# jabot_data$scientificNameStatus <- plantR::fixSpecies(x = jabot_data,
-#                                                       tax.name = "taxonName",
-#                                                       author.name = "taxonAuthor")$scientificNameStatus
-# jabot_data <- jabot_data[!grepl("^indet$", jabot_data$scientificNameStatus), ]
-# 
-# # Create minimum necessary columns for plantR::formatDwc
-# jabot_data$county <- NA
-# 
-# # Names that became NA are species that are not in our checklist, i.e., species from outside
-# # of the Neotropics; so remove
-# jabot_data <- jabot_data[!is.na(jabot_data$scientificName), ]
-# 
-# # Save
-# data.table::fwrite(jabot_data, file = "D:/jabot_occurrence_filtered_new.txt")
+file_path2 <- "C:/Users/ggrittz/Desktop/data/jabot_data/jabot_occurrences.txt"
+jabot_data <- as.data.frame(data.table::fread(file_path2))
+
+##### Already performed #####
+# Filter only species
+jabot_data <- jabot_data[!is.na(jabot_data$specificEpithet), ]
+# Separate canonical and author names
+jabot_data1 <- plantR::fixAuthors(jabot_data$scientificName)
+# Substitute back
+jabot_data$scientificName <- jabot_data1$tax.name
+jabot_data$scientificNameAuthorship <- jabot_data1$tax.author
+# Make family names Upper-lowercase (all caps in JABOT)
+jabot_data$family <- gsub("(\\w)(\\w*)", "\\U\\1\\L\\2", jabot_data$family, perl = TRUE)
+# Make full name
+jabot_data$scientificNameFull <- plantR:::buildName(jabot_data,
+                                                    col.names = c("scientificName",
+                                                                  "scientificNameAuthorship"))
+# Keep only names found in our list of names
+jabot_data <- jabot_data[jabot_data$scientificNameFull %in%
+                           our_names$input_full_name, ]
+
+# Get taxonomic info from our list of name
+# Match and substitute the jabot name by our checklist name, already manually checked
+match_indices <- match(jabot_data$scientificNameFull, our_names$input_full_name)
+jabot_data$scientificName <- our_names$our_accepted_scientificName[match_indices]
+jabot_data$family <- our_names$our_accepted_taxonFamily[match_indices]
+jabot_data$taxonAuthor <- our_names$our_accepted_taxonAuthorship[match_indices]
+jabot_data$taxonName <- our_names$our_accepted_taxonName[match_indices]
+
+# Make scientificNameStatus
+jabot_data$scientificNameStatus <- plantR::fixSpecies(x = jabot_data,
+                                                      tax.name = "taxonName",
+                                                      author.name = "taxonAuthor")$scientificNameStatus
+jabot_data <- jabot_data[!grepl("^indet$", jabot_data$scientificNameStatus), ]
+
+# Create minimum necessary columns for plantR::formatDwc
+jabot_data$county <- NA
+
+# Names that became NA are species that are not in our checklist, i.e., species from outside
+# of the Neotropics; so remove
+jabot_data <- jabot_data[!is.na(jabot_data$scientificName), ]
+
+# Save
+data.table::fwrite(jabot_data, file = "C:/Users/ggrittz/Desktop/data/jabot_data/jabot_occurrence_filtered_new.txt")
 
 # New start from here
 # Loading data (already prepared)
-file_path2 <- "D:/jabot_occurrence_filtered_new.txt"
+file_path2 <- "C:/Users/ggrittz/Desktop/data/jabot_data/jabot_occurrence_filtered_new.txt"
 jabot_data <- as.data.frame(data.table::fread(file_path2))
 
+##### Fix plantR's collection codes table (run once, before the loop) #####
+# plantR:::collectionCodes has duplicated keys (e.g. "POL_POL"), which makes
+# getCode() duplicate rows in its merge -> row-count mismatch in cbind
+cc <- plantR:::collectionCodes
+cc <- cc[order(!is.na(cc$col.OBS)), ]            # prefer proper IH entries
+cc <- cc[!duplicated(cc$collection.string), ]
+utils::assignInNamespace("collectionCodes", cc, ns = "plantR")
+rm(cc)
+
+# Country and state names from the plantR gazetteer written differently in the
+# WGSRPD table used by plantR::checkDist (reported to plantR); used only to build
+# a temporary location column for checkDist below
+loc_alias <- read.csv(here::here("data", "derived-data", "plantR_loc_alias.csv"))
+loc_alias <- setNames(loc_alias$taxon.distribution.bru, loc_alias$loc)
 
 # Preparing JABOT data ----------------------------------------------------
 
@@ -216,11 +231,23 @@ for(i in family_names){
                                    keep.values = TRUE)
   
   # Validating records that are falling outside of the species' indicated botanical country
-  jabot_data1 <- my_checkDist(x = jabot_data1,
-                                   tax.name = "taxonName",
-                                   tax.author = "taxonAuthor",
-                                   loc = "loc.correct",
-                                   source = "wcvp")
+  # Temporary location column with country/state names as written in WGSRPD
+  loc_state <- sub("^([^_]*_[^_]*).*", "\\1", jabot_data1$loc.correct)
+  fix_these <- grepl("_", loc_state) & loc_state %in% names(loc_alias)
+  jabot_data1$loc.dist <- jabot_data1$loc.correct
+  jabot_data1$loc.dist[fix_these] <- paste0(sub("_.*", "_", loc_state[fix_these]),
+                                      loc_alias[loc_state[fix_these]],
+                                      sub("^[^_]*_[^_]*", "", jabot_data1$loc.correct[fix_these]))
+  loc_country <- sub("_.*", "", jabot_data1$loc.dist)
+  fix_these <- loc_country %in% names(loc_alias)
+  jabot_data1$loc.dist[fix_these] <- paste0(loc_alias[loc_country[fix_these]],
+                                      sub("^[^_]*", "", jabot_data1$loc.dist[fix_these]))
+  jabot_data1 <- plantR::checkDist(x = jabot_data1,
+                              tax.name = "taxonName",
+                              tax.author = "taxonAuthor",
+                              loc = "loc.dist",
+                              source = "wcvp")
+  jabot_data1$loc.dist <- NULL
   
   # Validating confidence level of species determinators
   jabot_data1 <- plantR::validateTax(jabot_data1, kingdom = "plantae", 

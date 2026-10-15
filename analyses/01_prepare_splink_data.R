@@ -9,7 +9,7 @@ family_names <- here::here("data", "derived-data", "family_names.rds")
 family_names <- readRDS(file.path(family_names))
 
 # Loading our taxonomy to fix the names
-our_names <- readRDS(file.path(here::here("data", "derived-data", "checklist_standardized.rds")))
+our_names <- readRDS(file.path(here::here("data", "derived-data", "checklist_species_level.rds")))
 
 # Remove families already prepared, if any
 # families_done <- list.dirs(here::here("data", "derived-data", "speciesLink_occ"), 
@@ -25,14 +25,29 @@ shoreLines <- plantR::shoreLines
 world <- plantR::world
 worldMap <- plantR::worldMap
 
+##### Fix plantR's collection codes table (run once, before the loop) #####
+# plantR:::collectionCodes has duplicated keys (e.g. "POL_POL"), which makes
+# getCode() duplicate rows in its merge -> row-count mismatch in cbind
+cc <- plantR:::collectionCodes
+cc <- cc[order(!is.na(cc$col.OBS)), ]            # prefer proper IH entries
+cc <- cc[!duplicated(cc$collection.string), ]
+utils::assignInNamespace("collectionCodes", cc, ns = "plantR")
+rm(cc)
+
+# Country and state names from the plantR gazetteer written differently in the
+# WGSRPD table used by plantR::checkDist (reported to plantR); used only to build
+# a temporary location column for checkDist below
+loc_alias <- read.csv(here::here("data", "derived-data", "plantR_loc_alias.csv"))
+loc_alias <- setNames(loc_alias$taxon.distribution.bru, loc_alias$loc)
+
 # Loading internal functions
 devtools::load_all()
 
-##### ALREADY PERFORMED #####
-# Necessary step due to registers without author name in speciesLink data
+# ##### ALREADY PERFORMED #####
+# # Necessary step due to registers without author name in speciesLink data
 # library(plantRdata)
 # data(wfoNames) # is this the right way to call it?
-# file_path2 <- "D:/speciesLink_occurrences_filtered.txt"
+# file_path2 <- "C:/Users/ggrittz/Desktop/data/speciesLink_data/speciesLink_occurrences.txt"
 # splink_data <- data.table::fread(file_path2)
 # splink_data <- as.data.frame(splink_data)
 # # ID for later use
@@ -43,7 +58,7 @@ devtools::load_all()
 #                                  tax.name = "scientificname",
 #                                  author.name = "scientificnameauthor")
 # splink_data <- splink_data[!splink_data$scientificNameStatus %in% "indet", ]
-#   
+# 
 # # name matching with cases that do not contain a author name
 # splink_data <- plantR::prepSpecies(splink_data,
 #                                    tax.names = c("scientificName.new",
@@ -52,31 +67,38 @@ devtools::load_all()
 #                                    use.authors = TRUE,
 #                                    replace.names = FALSE,
 #                                    # clean.names = TRUE,
-#                                    parallel = TRUE,
+#                                    # parallel = TRUE,
 #                                    split.letters = TRUE,
-#                                    cores = 12,
+#                                    # cores = 12,
 #                                    show.progress = TRUE)
-#  
+# 
 # # Save
-# data.table::fwrite(splink_data, file = "D:/speciesLink_occurrence_filtered_new.txt")
+# data.table::fwrite(splink_data, 
+#                    file = "C:/Users/ggrittz/Desktop/data/speciesLink_data/speciesLink_occurrence_filtered_new.txt")
 ##### ALREADY PERFORMED ABOVE #####
 
 
 # Preparing speciesLink data ----------------------------------------------
 
-for(i in family_names){
-  
+# speciesLink data (read once; filtered by family inside the loop)
+file_path2 <- "C:/Users/ggrittz/Desktop/data/speciesLink_data/speciesLink_occurrence_filtered_new.txt"
+splink_all <- data.table::fread(file_path2)
+
+# Loop over our accepted families: the family written in speciesLink is messy
+# (authors, typos, "/" and ":" that cannot be folder names on Windows), so each
+# record gets the accepted family of its name before the loop; records whose
+# name is not in our checklist are dropped here instead of inside the loop
+splink_all$family <- our_names$our_accepted_taxonFamily[match(splink_all$scientificNameFull,
+                                                               our_names$input_full_name)]
+splink_all <- splink_all[!is.na(family), ]
+splink_families <- sort(unique(splink_all$family))
+
+for(i in splink_families){
+
   cat("Preparing", i, "\n")
-    
-  # speciesLink data
-  file_path2 <- "D:/speciesLink_occurrence_filtered_new.txt"
-  # Prepare the header first
-  header <- readLines(file_path2, n = 1)
-  # Split the header into column names
-  header <- unlist(strsplit(header, "\t"))
-  
-  # Load and filter by family
-  splink_data <- data.table::fread(file_path2)[family == i, ]
+
+  # Filter by family
+  splink_data <- splink_all[family == i, ]
   
   # If data loaded is NULL or has no rows
   if (is.null(splink_data) || nrow(splink_data) == 0) {
@@ -256,16 +278,28 @@ for(i in family_names){
                                    keep.values = TRUE)
 
   # Validating records that are falling outside of the species' indicated botanical country
-  splink_data <- my_checkDist(x = splink_data,
-                                   tax.name = "taxonName",
-                                   tax.author = "taxonAuthor",
-                                   loc = "loc.correct",
-                                   source = "wcvp")
+  # Temporary location column with country/state names as written in WGSRPD
+  loc_state <- sub("^([^_]*_[^_]*).*", "\\1", splink_data$loc.correct)
+  fix_these <- grepl("_", loc_state) & loc_state %in% names(loc_alias)
+  splink_data$loc.dist <- splink_data$loc.correct
+  splink_data$loc.dist[fix_these] <- paste0(sub("_.*", "_", loc_state[fix_these]),
+                                      loc_alias[loc_state[fix_these]],
+                                      sub("^[^_]*_[^_]*", "", splink_data$loc.correct[fix_these]))
+  loc_country <- sub("_.*", "", splink_data$loc.dist)
+  fix_these <- loc_country %in% names(loc_alias)
+  splink_data$loc.dist[fix_these] <- paste0(loc_alias[loc_country[fix_these]],
+                                      sub("^[^_]*", "", splink_data$loc.dist[fix_these]))
+  splink_data <- plantR::checkDist(x = splink_data,
+                              tax.name = "taxonName",
+                              tax.author = "taxonAuthor",
+                              loc = "loc.dist",
+                              source = "wcvp")
+  splink_data$loc.dist <- NULL
   
   # Validating confidence level of species determinators
   splink_data <- plantR::validateTax(splink_data, 
                                      kingdom = "plantae",
-                                     generalist = TRUE, print = FALSE)
+                                     generalist = FALSE, print = FALSE)
   
   # Considering low complexity ID as "high"
   ###### Gotta add this in the next version #####

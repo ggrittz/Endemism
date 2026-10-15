@@ -13,7 +13,7 @@ family_names <- readRDS(file.path(family_names))
 # family_names <- toupper(family_names)
 
 # Loading our taxonomy to fix the names
-our_names <- readRDS(file.path(here::here("data", "derived-data", "checklist_standardized.rds")))
+our_names <- readRDS(file.path(here::here("data", "derived-data", "checklist_species_level.rds")))
 
 # Pre-loading objects that will be needed in the pipeline below
 islandsBuff <- plantR::islandsBuff
@@ -23,8 +23,23 @@ shoreLines <- plantR::shoreLines
 world <- plantR::world
 worldMap <- plantR::worldMap
 
+##### Fix plantR's collection codes table (run once, before the loop) #####
+# plantR:::collectionCodes has duplicated keys (e.g. "POL_POL"), which makes
+# getCode() duplicate rows in its merge -> row-count mismatch in cbind
+cc <- plantR:::collectionCodes
+cc <- cc[order(!is.na(cc$col.OBS)), ]            # prefer proper IH entries
+cc <- cc[!duplicated(cc$collection.string), ]
+utils::assignInNamespace("collectionCodes", cc, ns = "plantR")
+rm(cc)
+
+# Country and state names from the plantR gazetteer written differently in the
+# WGSRPD table used by plantR::checkDist (reported to plantR); used only to build
+# a temporary location column for checkDist below
+loc_alias <- read.csv(here::here("data", "derived-data", "plantR_loc_alias.csv"))
+loc_alias <- setNames(loc_alias$taxon.distribution.bru, loc_alias$loc)
+
 # Loading data (already prepared)
-file_path2 <- "D:/reflora_occurrence_filtered_new.txt"
+file_path2 <- "C:/Users/ggrittz/Desktop/data/reflora_data/reflora_occurrence_filtered_new.txt"
 reflora_data <- as.data.frame(data.table::fread(file_path2))
 
 
@@ -167,11 +182,23 @@ for(i in family_names){
                                    keep.values = TRUE)
   
   # Validating records that are falling outside of the species' indicated botanical country
-  reflora_data1 <-my_checkDist(x = reflora_data1,
-                                   tax.name = "taxonName",
-                                   tax.author = "taxonAuthor",
-                                   loc = "loc.correct",
-                                   source = "wcvp")
+  # Temporary location column with country/state names as written in WGSRPD
+  loc_state <- sub("^([^_]*_[^_]*).*", "\\1", reflora_data1$loc.correct)
+  fix_these <- grepl("_", loc_state) & loc_state %in% names(loc_alias)
+  reflora_data1$loc.dist <- reflora_data1$loc.correct
+  reflora_data1$loc.dist[fix_these] <- paste0(sub("_.*", "_", loc_state[fix_these]),
+                                        loc_alias[loc_state[fix_these]],
+                                        sub("^[^_]*_[^_]*", "", reflora_data1$loc.correct[fix_these]))
+  loc_country <- sub("_.*", "", reflora_data1$loc.dist)
+  fix_these <- loc_country %in% names(loc_alias)
+  reflora_data1$loc.dist[fix_these] <- paste0(loc_alias[loc_country[fix_these]],
+                                        sub("^[^_]*", "", reflora_data1$loc.dist[fix_these]))
+  reflora_data1 <- plantR::checkDist(x = reflora_data1,
+                                tax.name = "taxonName",
+                                tax.author = "taxonAuthor",
+                                loc = "loc.dist",
+                                source = "wcvp")
+  reflora_data1$loc.dist <- NULL
   
   # Validating confidence level of species determinators
   # Error in col["order"] : 
@@ -185,7 +212,7 @@ for(i in family_names){
                                                      types = "typeStatus", 
                                                      rec.ID = "numTombo", 
                                                      rec.type = "basisOfRecord"),
-                                       generalist = TRUE, print = FALSE)
+                                       generalist = FALSE, print = FALSE)
   
   # Considering low complexity ID as "high"
   ###### Gotta add this in the next version #####
