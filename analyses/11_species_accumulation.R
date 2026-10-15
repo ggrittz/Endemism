@@ -12,9 +12,8 @@
 #' @date 2025/10/13
 #' 
 # Load and preparing the species list -----------------------------------------------------------------
-file_path <- here::here("data", "derived-data")
-check_file <- list.files(file_path, pattern = "nt_species", 
-                         full.names = TRUE)
+# Neotropical endemics saved by 11_preparing_checklist.R
+check_file <- here::here("data", "derived-data", "nt_species.rds")
 # check <- readRDS(check_file)
 check <- as.data.frame(readRDS(check_file))
 names(check) <- "scientificName"
