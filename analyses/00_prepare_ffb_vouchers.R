@@ -21,10 +21,15 @@ types <- types[!is.na(types$recordedBy), ]
 # # Clean the recordedBy " s.n." (just remove from the string)
 # # since plantR will add it automatically if it is NA
 # types$recordedBy <- gsub(" s\\.n\\.", "", types$recordedBy)
-types$recordedBy.new <- plantR::prepName(types$recordedBy,
+# Split "Collector Number" before standardising (prepName/colNumber break
+# names when the number carries letters, e.g. "Glaziou 8204a")
+name_part <- sub("\\s+[^ ]*[0-9][^ ]*$", "", types$recordedBy)
+numb_part <- sub("^.*\\s([^ ]*[0-9][^ ]*)$", "\\1", types$recordedBy)
+numb_part[numb_part == types$recordedBy] <- NA
+types$recordedBy.new <- plantR::prepName(name_part,
                                          output = "first",
                                          sep.out = "; ")
-types$recordNumber.new <- plantR::colNumber(types$recordedBy, 
+types$recordNumber.new <- plantR::colNumber(numb_part,
                                             noNumb = "s.n.")
 # Also remove from here...
 types <- types[!grepl("s\\.n\\.", types$recordNumber.new), ] 
@@ -40,6 +45,9 @@ types$scientificName <- plantR:::buildName(types,
 types$voucher_these <- paste(types$recordedBy.new,
                              types$recordNumber.new,
                              sep = "_")
+# One row per voucher and species (FFB repeats vouchers across herbaria)
+types <- types[!duplicated(types[, c("voucher_these", "taxonName")]), ]
+
 # Save
 save_path <- here::here("data", "derived-data", "rds")
 save_name <- "ffb_vouchers.rds"
