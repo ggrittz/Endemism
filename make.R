@@ -1,8 +1,12 @@
 #' Endemism: A Research Compendium
 #' 
 #' @description 
-#' A paragraph providing a full description of the project and describing each 
-#' step of the workflow.
+#' Runs the full workflow of the paper "A biome lens is critical to
+#' understanding tree endemism across tropical America": cleaning of herbarium
+#' records (01-02), biome maps (03-04), endemism levels (05), weighted
+#' endemism and null model (06), interpolation (07), figures (08), checklists
+#' (09-10), species description curve (11), manuscript numbers (12) and the
+#' Zenodo export (13).
 #' 
 #' @author Guilherme S. Grittz \email{ggrittz@usp.br}
 #' 
@@ -43,4 +47,15 @@ source(here::here("analyses", "01_prepare_jabot_data.R"))
 source(here::here("analyses", "01_prepare_reflora_data.R"))
 source(here::here("analyses", "01_prepare_splink_data.R"))
 source(here::here("analyses", "02_removing_duplicates.R"))
+source(here::here("analyses", "03_prepare_TAmap.R"))
+source(here::here("analyses", "04_crossing_maps.R"))
+source(here::here("analyses", "05_endemism_levels.R"))        # ~7.5 h
+source(here::here("analyses", "06_calculate_wee.R"))
+source(here::here("analyses", "07_rarefy_interpolate_new.R"))
+source(here::here("analyses", "08_preparing_plots.R"))
+source(here::here("analyses", "09_preparing_extra_records.R"))
+source(here::here("analyses", "10_preparing_checklist.R"))
+source(here::here("analyses", "11_species_accumulation.R"))
+source(here::here("analyses", "12_manuscript_numbers.R"))
+source(here::here("analyses", "13_zenodo_export.R"))
 
