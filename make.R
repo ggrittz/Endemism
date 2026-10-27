@@ -3,7 +3,7 @@
 #' @description 
 #' Runs the full workflow of the paper "A biome lens is critical to
 #' understanding tree endemism across tropical America": cleaning of herbarium
-#' records (01-02), biome maps (03-04), endemism levels (05), weighted
+#' records (00-02), biome maps and protected areas (03-04), endemism levels (05), weighted
 #' endemism and null model (06), interpolation (07), figures (08), checklists
 #' (09-10), species description curve (11), manuscript numbers (12) and the
 #' Zenodo export (13).
@@ -42,16 +42,18 @@ writexl::write_xlsx(sts_class, here::here("data", "derived-data", "maps",
                                           "final_classification.xlsx"))
 rm(sts_class)
 
+source(here::here("analyses", "00_prepare_ffb_vouchers.R"))
 source(here::here("analyses", "01_prepare_gbif_data.R"))
 source(here::here("analyses", "01_prepare_jabot_data.R"))
 source(here::here("analyses", "01_prepare_reflora_data.R"))
 source(here::here("analyses", "01_prepare_splink_data.R"))
 source(here::here("analyses", "02_removing_duplicates.R"))
 source(here::here("analyses", "03_prepare_TAmap.R"))
+source(here::here("analyses", "00_prepare_wdpa.R"))
 source(here::here("analyses", "04_crossing_maps.R"))
 source(here::here("analyses", "05_endemism_levels.R"))        # ~7.5 h
 source(here::here("analyses", "06_calculate_wee.R"))
-source(here::here("analyses", "07_rarefy_interpolate_new.R"))
+source(here::here("analyses", "07_rarefy_interpolate.R"))
 source(here::here("analyses", "08_preparing_plots.R"))
 source(here::here("analyses", "09_preparing_extra_records.R"))
 source(here::here("analyses", "10_preparing_checklist.R"))
