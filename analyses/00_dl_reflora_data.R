@@ -156,4 +156,4 @@ all_data1$county <- NA
 all_data1 <- all_data1[!is.na(all_data1$scientificName), ]
 
 # Save
-data.table::fwrite(all_data1, file = "C:/Users/ggrittz/Desktop/data/reflora_data/reflora_occurrence_filtered_new.txt")
+data.table::fwrite(all_data1, file = file.path(path_to_save, "reflora_occurrence_filtered.txt"))

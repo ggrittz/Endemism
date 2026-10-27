@@ -68,5 +68,5 @@ herbarios <- herbarios[sapply(herbarios, function(x) x[, .N] > 0)]
 # dplyr::bind_rows also fills missing columns with NA
 all_data <- dplyr::bind_rows(herbarios, .id = 'my_id')  # my_id now holds the herbarium code
 
-# Save to my D:/
-data.table::fwrite(all_data, file = "C:/Users/ggrittz/Desktop/data/jabot_data/jabot_occurrences.txt")
+# Save
+data.table::fwrite(all_data, file = file.path(path_to_save, "jabot_occurrences.txt"))
