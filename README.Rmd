@@ -40,8 +40,7 @@ Endemism <img src="man/figures/compendium-sticker.png" align="right" style="floa
 ## Overview
 
 This research compendium contains the code behind the paper **"A biome lens
-is critical to understanding tree endemism across tropical America"**
-([SynTreeSys](https://github.com/synTreeSys) network).
+is critical to understanding tree endemism across tropical America"**.
 
 We compiled herbarium occurrence records of all tree species of the Americas
 (GBIF, JABOT, REFLORA and speciesLink), cleaned them with
