@@ -1,4 +1,0 @@
-# .gitattributes
-*.sh text eol=lf
-*.R text eol=lf
-*.txt text eol=lf
