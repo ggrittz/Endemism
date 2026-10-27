@@ -24,6 +24,8 @@ tmp <- plantR::fixAuthors(check$scientificName)
 names(tmp) <- c(sci_name, "scientificName.new", 
                 "scientificNameAuthorship.new")
 check <- dplyr::left_join(check, tmp, by = sci_name)
+# Same species with two author spellings: keep one
+check <- check[!duplicated(check$scientificName.new), ]
 # name matching to get the WCVP ID using plantR
 data("wcvpNames", package = "plantRdata")
 tmp <- plantR::prepSpecies(check, 
@@ -171,10 +173,10 @@ table(check1$first_published, useNA = "always")
 
 
 file.out <- "outputs/results_species_accumulation.txt"
-writeLines("#### MAIN METHODS AND RESULTS FROM THE EVALUATION OF THE SPECIES ACCUMULATION CURVE (from code: 12_species_accumulation.r) ####\n", 
+writeLines("#### MAIN METHODS AND RESULTS FROM THE EVALUATION OF THE SPECIES ACCUMULATION CURVE (from code: 11_species_accumulation.R) ####\n", 
            file.out)
-desc <- "We obtained from the WCVP backbone (version X) the date of first publication for each species. 
-This date corresponded to the oldest date of publication when accepted names contained basionyms or synonyms published prior to the accepted name.\n"
+desc <- paste0("We obtained from the WCVP backbone (rWCVPdata version ", utils::packageVersion("rWCVPdata"), ") the date of first publication for each species. 
+This date corresponded to the oldest date of publication when accepted names contained basionyms or synonyms published prior to the accepted name.\n")
 write(desc, file=file.out, append=TRUE)
 
 # Getting the data ready for downstream analyses
@@ -207,7 +209,7 @@ DATA1 <- rbind.data.frame(data.frame(ano=seq(min(DATA1$ano) - prev.ys, min(DATA1
 # DATA1$sp <- DATA1[[2]]/(max_sp1 * factor)
 DATA1$sp <- DATA1[[2]]
 DATA1$ys <- DATA1[[1]] - min(DATA1[[1]], na.rm = TRUE) + 1
-desc <- "We then calculated the cumulative number of known species each year until 2022.\n"
+desc <- paste0("We then calculated the cumulative number of known species each year until ", max(dados.anos1$anos), ".\n")
 write(desc, file=file.out, append=TRUE)
 
 # Fitting different models to the data of number of species described per year
@@ -303,10 +305,10 @@ DATA1$est.prop[DATA1$est.prop < 0] <- 0
 DATA1$predicted <- floor(DATA1$est.prop)
 head(DATA1, 25); tail(DATA1[!is.na(DATA1$sp), ], 10); tail(DATA1)
 
-desc <- cat("Next we fitted different candidate non-linear function to describe the species accumulation curve using the function nls() from base R (cite R).
-The candidate models were: ", models,"\n")
+desc <- paste0("Next we fitted different candidate non-linear function to describe the species accumulation curve using the function nls() from base R (cite R).
+The candidate models were: ", paste(models, collapse = ", "), "\n")
 write(desc, file=file.out, append=TRUE)
-desc <- "The non-linear Generalized Ricker model (i.e. species ~ b * (years/a * exp(1 - years/a))^alpha), was the one that by far presented the vest fit to the species accumulation curve.\n"
+desc <- "The non-linear Generalized Ricker model (i.e. species ~ b * (years/a * exp(1 - years/a))^alpha), was the one that by far presented the best fit to the species accumulation curve.\n"
 write(desc, file=file.out, append=TRUE)
 write(paste(rownames(AICtab), rep(c("dAIC:", "df:"), each = length(models)), unlist(AICtab)), file=file.out, append=TRUE)
 desc <- "\nThis hump-shaped model has a parameter b which estimates the peak of the curve, which in our context is a good estimate for the maximum number of species that will be described in our study area in the future.\n"
@@ -316,11 +318,14 @@ write(desc, file=file.out, append=TRUE)
 # anos_sel <- seq(min(DATA$ano), max(DATA$ano),  by = 5)
 # anos_ci <- DATA$ys[which(DATA$ano %in% anos_sel)]
 anos_ci <- DATA1$ys
+set.seed(2026) # predictNLS also runs a Monte Carlo simulation
 pred_ci1 <-  propagate:::predictNLS(best1, interval = "prediction",
                                     newdata = data.frame(ys = anos_ci),
                                     nsim = 100000)
-DATA1$pred.low.95 <- pred_ci1$summary$`Prop.2.5%`
-DATA1$pred.high.95 <- pred_ci1$summary$`Prop.97.5%`
+# Column names of the summary vary between propagate versions ("Prop." or "Sim.");
+# take the first 2.5% and 97.5% columns (propagation, if present, comes first)
+DATA1$pred.low.95 <- pred_ci1$summary[[grep("2\\.5%", names(pred_ci1$summary))[1]]]
+DATA1$pred.high.95 <- pred_ci1$summary[[grep("97\\.5%", names(pred_ci1$summary))[1]]]
 
 desc <- "Based on the fitted model, we obtained the predicted y-value at the peak (i.e the estimated number of species) and the x-value at the peak (the estimated year when all species will be described).
 Using the function predictNLS() of the package propagate (Spiess, A. (2025). propagate: Propagation of Uncertainty. R package version 1.0-7, <https://CRAN.R-project.org/package=propagate>.), we obtained the 95% prediction intervals based on uncertainty propagation.\n"
@@ -446,9 +451,10 @@ pico <- paste0(round(stats::coef(best1)[2], 0), " tree species [95% CI: ",
                floor(conf95[2,1]), "-", 
                ceiling(conf95[2,2]), "]")
 toto <- range(check1$first_published.new, na.rm = TRUE) # species described between 1753 and 2023
-ano.pico <- paste0(seq(toto[1], toto[1]+1000, 1)[round(stats::coef(best1)[1], 0)], " [95% CI: ",
-                   seq(toto[1], toto[1]+1000, 1)[floor(conf95[1,1])], "-", 
-                   seq(toto[1], toto[1]+1000, 1)[ceiling(conf95[1,2])], "]")
+# ys = 1 is min(DATA1$ano) (prev.ys years before the first description), so year = min(DATA1$ano) + a - 1
+ano.pico <- paste0(min(DATA1$ano) + round(stats::coef(best1)[1], 0) - 1, " [95% CI: ",
+                   min(DATA1$ano) + floor(conf95[1,1]) - 1, "-", 
+                   min(DATA1$ano) + ceiling(conf95[1,2]) - 1, "]")
 check1[check1$first_published %in% toto[1], ]
 desc <- paste0("The earliest species in our study area were described in ", toto[1],". The rate of species described each year increased until the early 20s of the last century, when the rate started to decrease. \n", sep="")
 write(desc, file=file.out, append=TRUE)
@@ -458,6 +464,27 @@ desc <- paste0("However, we estimated that there still are ",
               " and that will not be achieved before the year of ", 
                ano.pico,", given the historical rate of species discovery.\n", sep="")
 write(desc, file=file.out, append=TRUE)
+
+# Numbers for the manuscript ----------------------------------------------
+n_desc <- nrow(check1)
+dir.create(here::here("outputs", "numbers"), showWarnings = FALSE, recursive = TRUE)
+utils::write.csv(data.frame(key = c("n_spp_described", "n_spp_described_since_2001", "pct_spp_described_since_2001",
+                                    "n_spp_total_pred", "n_spp_total_low95", "n_spp_total_high95",
+                                    "n_spp_to_discover", "pct_spp_unknown", "year_all_described"),
+                            value = c(n_desc,
+                                      sum(check1$first_published.new1 >= 2001, na.rm = TRUE),
+                                      100 * mean(check1$first_published.new1 >= 2001, na.rm = TRUE),
+                                      round(stats::coef(best1)[2]), floor(conf95[2, 1]), ceiling(conf95[2, 2]),
+                                      round(stats::coef(best1)[2]) - n_desc,
+                                      100 * (1 - n_desc / stats::coef(best1)[2]),
+                                      ano.pico),
+                            description = c("Endemic species with a description year", "Described in this century",
+                                            "% described in this century", "Predicted total (generalized Ricker peak)",
+                                            "Lower 95% CI", "Upper 95% CI", "Species still to be described",
+                                            "% of the predicted total still unknown",
+                                            "Year when all species will be described [95% CI]")),
+                 here::here("outputs", "numbers", "11_species_accumulation.csv"), row.names = FALSE)
+rm(n_desc)
 
 
 ## From the rate of species discovery
@@ -469,57 +496,50 @@ write(desc, file=file.out, append=TRUE)
 
 
 ## Plotting the results --------------------------------------------------------------------------------
-# Plotting the fit of the best model
-pdf(file = "./outputs/FigureXX.pdf", width = 7.24, height = 7.1, pointsize = 12, useKerning = TRUE, 
-    compress = FALSE, useDingbats = FALSE)
+# Figure style (same as 09_preparing_plots.R)
+pal_div <- hcl.colors(100, "RdYlBu", rev = TRUE)
+col_hi  <- pal_div[100]
+fig_w   <- 10
+fig_h   <- 8
+theme_sts <- ggplot2::theme_bw(base_size = 15) +
+  ggplot2::theme(panel.grid = ggplot2::element_line(colour = "grey90", linewidth = 0.2),
+                 legend.position = "right",
+                 legend.key = ggplot2::element_blank(),
+                 strip.background = ggplot2::element_rect(fill = "grey95"))
 
-## species accumulation
-DATA2 <- DATA1[-c(1:prev.ys), ]
-ylim <- range(DATA1[grepl("sp|est.prop|pred", names(DATA2))], 
-              na.rm = TRUE)
-xlim <- range(DATA2$ys, na.rm = TRUE)
-preds1 <- predict(best1, data.frame(ys = seq(range(DATA2$ys)[1], 
-                                           range(DATA2$ys)[2], by = 1)))
-graphics::par(mfrow = c(1, 1), mgp = c(3, 0.45, 0), 
-              mar = c(4.5, 4.5, 1, 1))
-graphics::plot(DATA2$sp ~ DATA2$ys, pch = 19, cex = 1.2, col = adjustcolor("black", alpha.f = 0.15), 
-               ylim = ylim, xlim = xlim, xlab = "Years", ylab = "New species described", 
-               xaxt = "n", yaxt = "n", cex.lab = 1.4)
-graphics::axis(1, at = seq(min(DATA2$ys), max(DATA2$ys), 10), 
-               labels = seq(min(DATA2$ano), max(DATA2$ano), 10), 
-               tcl = -0.3)
-ats <- pretty(seq(min(ylim), max(ylim), 0.1))
-axis(2, at = ats, labels = ats, 
-     las = 1, tcl = -0.3)
-range1 <- (range(stats::na.omit(DATA2)$ys)[1] - 1)
-range2 <- (range(stats::na.omit(DATA2)$ys)[2] + 1)
-leg.pos <- "bottomright"
-
-if (best.name == "general_ricker") {
-  graphics::curve(stats::coef(best1)[2] * (x/stats::coef(best1)[1] * 
-                    exp(1 - x/stats::coef(best1)[1]))^stats::coef(best1)[3], 
-                  add = TRUE, lwd = 2, lty = 1, col = "red")
-  # graphics::curve(stats::coef(best1)[2] * (x/stats::coef(best1)[1] * 
-  #                   exp(1 - x/stats::coef(best1)[1]))^stats::coef(best1)[3], 
-  #                 from = range1, to = range2, add = TRUE, lwd = 2, 
-  #                 col = "red")
-  # Plot the profile with specified confidence levels
-  anos_ci1 <- anos_ci[-c(1:prev.ys)]
-  lines(anos_ci1, DATA2$pred.low.95, col = 2, lwd = 2, lty = 2)
-  lines(anos_ci1, DATA2$pred.high.95, col = 2, lwd = 2, lty = 2)
-
-  legend(leg.pos, c("Ricker model"), lwd = 3,
-         col = "red", bty = "n", cex = 1.4)
-  pico <- stats::coef(best1)[2]
-  ano.pico <- seq(1753, 1753+1000, 1)[round(stats::coef(best1)[1], 0)]
-                     
-  abline(h = pico, lty = 2)
-  abline(v = ano.pico, lty = 2)
-
-  legend("topleft",
-         legend = paste("Value at peak =", round(pico,0), "species. Year at peak =", ano.pico),
-         bty = "n",)
-}
+# Species accumulation: observed, generalized Ricker fit and 95% prediction interval
+# (ys = 1 is the first year of DATA1, so the peak year is min(DATA1$ano) + a - 1)
+acc_df  <- DATA1[-seq_len(prev.ys), ]
+peak_sp <- stats::coef(best1)[["b"]]
+peak_yr <- min(DATA1$ano) + stats::coef(best1)[["a"]] - 1
+p_acc <- ggplot2::ggplot(acc_df, ggplot2::aes(x = ano)) +
+  ggplot2::geom_ribbon(ggplot2::aes(ymin = pred.low.95, ymax = pred.high.95,
+                                    fill = "95% prediction interval"), alpha = 0.3) +
+  ggplot2::geom_hline(yintercept = peak_sp, linetype = "dashed", colour = "grey40") +
+  ggplot2::geom_vline(xintercept = peak_yr, linetype = "dashed", colour = "grey40") +
+  ggplot2::geom_point(ggplot2::aes(y = sp, colour = "Described species"),
+                      size = 1.2, alpha = 0.4, na.rm = TRUE) +
+  ggplot2::geom_line(ggplot2::aes(y = est.prop, colour = "Generalized Ricker fit"), linewidth = 1) +
+  ggplot2::annotate("text", x = peak_yr, y = peak_sp, hjust = 1.05, vjust = -0.5, size = 4.5,
+                    label = paste0(format(round(peak_sp), big.mark = ","), " species in ",
+                                   round(peak_yr))) +
+  ggplot2::scale_colour_manual(name = NULL,
+                               values = c("Described species" = "black",
+                                          "Generalized Ricker fit" = col_hi)) +
+  ggplot2::scale_fill_manual(name = NULL, values = c("95% prediction interval" = col_hi)) +
+  ggplot2::scale_y_continuous(labels = scales::label_comma()) +
+  ggplot2::guides(colour = ggplot2::guide_legend(order = 1,
+                                                 override.aes = list(shape = c(16, NA),
+                                                                     linetype = c(0, 1),
+                                                                     alpha = 1)),
+                  fill = ggplot2::guide_legend(order = 2)) +
+  ggplot2::labs(title = "Species accumulation", x = "Year", y = "Cumulative species described") +
+  theme_sts
+ggplot2::ggsave(here::here("figures", "FigureS2.svg"), p_acc, width = fig_w, height = fig_h, bg = "white")
+ggplot2::ggsave(here::here("figures", "FigureS2.png"), p_acc, width = fig_w, height = fig_h, dpi = 300, bg = "white")
+# PDF (vector) for PNAS
+ggplot2::ggsave(here::here("figures", "FigureS2.pdf"), p_acc, width = fig_w, height = fig_h, bg = "white")
+rm(pal_div, col_hi, fig_w, fig_h, theme_sts, acc_df, peak_sp, peak_yr, p_acc)
 
 ## species discovery
 # ylim <- range(DATA[grepl("sp|est.prop", names(DATA))], 
@@ -599,5 +619,4 @@ if (best.name == "general_ricker") {
 # }
 # legend(leg.pos, c("Ricker model", "Quadratic model"), lwd = 3, 
 #        col = c("red", "#56B4E9"), bty = "n", cex = 1.4)
-dev.off()
 

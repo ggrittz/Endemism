@@ -1,40 +1,21 @@
-
-
 # Checklist of tropical American trees ------------------------------------
+# The slow family-by-family step that builds the extra records (records excluded from
+# the spatial dataset) is in 10.0_preparing_extra_records.R, which must be run
+# before this script; its output (supp_data_for_endemics.rds) is read below
 
 devtools::load_all()
-# Cleaned occs folder
-file_path1 <- here::here("data", "derived-data", "Cleaned_occs")
 # Endemics occs: crème de la crème registers
 final_df <- readRDS(here::here("data", "derived-data", "rds", "final_df_unfiltered.rds"))
-# final_df_unf <- readRDS(here::here("data", "derived-data", "rds", "final_df_unfiltered.rds"))
-# Load data by family
-family_names <- here::here("data", "derived-data", "family_names.rds")
-family_names <- readRDS(file.path(family_names))
-# Latam Map
-latam_class <- terra::vect(here::here("data", "derived-data", "maps", "latamMap_classified.gpkg"))
-latam_class <- terra::as.data.frame(latam_class)
 
 # Loading species list
 our_names <- readRDS(here::here("data", "derived-data", "checklist_species_level.rds"))
 # Only trees
 our_names <- our_names[grepl("tree", our_names$lifeForm_aggregated), ]
 # Only accepted names below
-sum(!duplicated(our_names$our_accepted_scientificName)) # 34,399
+sum(!duplicated(our_names$our_accepted_scientificName)) 
 aggregate(our_accepted_scientificName ~ our_accepted_bb,
           data = our_names[!duplicated(our_names$our_accepted_scientificName),],
-          FUN = length) # 96% wfo
-
-##### HOPE THIS CAN BE FIXED VIA-TAXONOMY FIX #####
-##### NEED TO RE-RUN EVERYTHING #####
-# Which names came from GBIF only?
-# a <- our_names[our_names$our_accepted_bb %in% "gbif",]
-# a <- a[!duplicated(a$our_accepted_scientificName), ]
-# b <- a[, c("input_full_name", "gbif_output_full_name", "wfo_output_full_name", 
-#            "our_taxonID", "our_accepted_bb", "our_accepted_scientificName",
-#            "status_check", "to_check", "wfo_match_type", "trust_class", "source",
-#            "taxonName", "taxonAuthorship", "wfo_scientificName", "wfo_scientificNameAuthorship")]
-
+          FUN = length) 
 
 ##### Fast summarization of this data to add to paper table S2 #####
 to_summ <- our_names[, c("source", "input_full_name", "our_accepted_scientificName")]
@@ -107,30 +88,7 @@ efgs <- terra::project(efgs, "epsg:4326")
 efgs <- efgs[efgs$Morrone_re %in% "Neotropical", ]
 biomes <- sort(unique(efgs$our_efg))
 
-# WGSRPD table used by plantR::checkDist (reported to plantR); used only to build
-# a temporary location column for checkDist below
-loc_alias <- read.csv(here::here("data", "derived-data", "plantR_loc_alias.csv"))
-loc_alias <- setNames(loc_alias$taxon.distribution.bru, loc_alias$loc)
-
-# Vouchers from FFB
-vouchers <- readRDS(here::here("data", "derived-data", "rds", "ffb_vouchers.rds"))
-# Voucher + binomial keys (FFB uses these vouchers for species distributions)
-ffb_keys <- paste(vouchers$voucher_these,
-                  sub("^([^ ]+ +[^ ]+).*$", "\\1", vouchers$taxonName),
-                  sep = "_")
-
-
-##### RUN LATER WITH NEW PLANTR TO AVOID DOUBLE NAME AT THE END #####
-# brazil_minas gerais_pocos caldas_pocos caldas
-latam_class <- latam_class[latam_class$NAME_all %in% latam_adm$name, ]
-
-# First, define which countries are 100% Neotropical
-# nt_country <- aggregate(Morrone_re_new ~ NAME_0,
-#                         data = latam_class,
-#                         FUN = function(x) paste(unique(x), collapse = "|"))
-# nt_country_string <- paste0("", nt_country$NAME_0, "", collapse = "|")
-
-# Removing exotics
+# Removing exotics (same list as in 10.0_preparing_extra_records.R)
 exotics <- paste(c("Mangifera", "Cocos", "Artocarpus", "Hovenia", "Eriobotrya",
                    "Eucalyptus", "Grevillea", "Ligustrum", "Pittosporum", "Syzygium",
                    "Spathodea", "Citrus", "Coffea", "Cupressus", "Thespesia", "Delonix",
@@ -140,150 +98,6 @@ exotics <- paste(c("Mangifera", "Cocos", "Artocarpus", "Hovenia", "Eriobotrya",
 
 # Do the same later in bad_list and the other names too
 final_df <- final_df[!grepl(exotics, final_df$scientificName), ]
-
-# How many species occur but are not endemic?
-# Not endemics to the neotropics but occur in the neotropics!
-# not_end <- sort(unique(final_df$scientificName[final_df$is_nt_endemic %in% FALSE &
-#                                                      final_df$is_nt %in% TRUE]))
-bad_list <- list()
-
-# Only relevant columns for checklisting and filtering
-
-# Also keep the occurrenceRemarks to try to assign a biome based on description
-cols = c("ids", "collectionCode.new", "catalogNumber.new", "catalogNumber", 
-         "recordedBy.new", "recordNumber.new", "year.new", "family", 
-         "scientificName", "taxonName", "taxonAuthor", "country.new", 
-         "stateProvince.new", "municipality.new", "loc.correct1", "geo.check1", 
-         "tax.check1", "out.check", "dist.check", "dup.ID", "dup.prop",
-         "typeStatus", "scientific.name", "numTombo", "temp.accession", "month", 
-         "day", "loc.check1", "maha.robust", "origin.coord1", "cult.check",
-         "occurrenceRemarks")
-
-# Infraspecific accepted names are moved up to their species in the Taxonomy
-# project (12_species_level_checklist.R), so no taxonomy fix is needed here
-
-
-# Load by family, keep what is usable ("high") and is not already on final_df and bind
-for(i in family_names){
-  
-  cat("Loading and filtering", i, "\n")
-  rds_path <- file.path(file_path1, i, paste0(i, ".rds"))
-  if(!file.exists(rds_path)){
-    next
-  }
-  
-  
-  
-  family_data_bad <- readRDS(rds_path)
-  family_data_bad <- family_data_bad[, intersect(cols, names(family_data_bad))]
-  
-  
-  
-  # Only trees
-  family_data_bad <- dplyr::left_join(family_data_bad,
-                                      our_names[, c("our_accepted_scientificName",
-                                                    "lifeForm_aggregated")],
-                                      by = c("scientificName" = "our_accepted_scientificName"))
-  family_data_bad <- family_data_bad[!duplicated(family_data_bad$ids), ]
-  family_data_bad <- family_data_bad[grepl("tree", family_data_bad$lifeForm_aggregated), ] 
-  
-  if(dim(family_data_bad)[1] == 0){
-    next
-  }
-  
-  # Records matching an FFB voucher of the same species become "high"
-  occ_keys <- paste(family_data_bad$recordedBy.new, family_data_bad$recordNumber.new,
-                    sub("^([^ ]+ +[^ ]+).*$", "\\1", family_data_bad$scientificName),
-                    sep = "_")
-  family_data_bad$tax.check1[occ_keys %in% ffb_keys] <- "high"
-
-  # Minimum conditions to enter here:
-  # Is at least tax.check1 high
-  family_data_bad <- family_data_bad[family_data_bad$tax.check1 %in% "high", ]
-  # Is not cultivated
-  family_data_bad <- family_data_bad[family_data_bad$cult.check %in% c(NA, ""), ]
-  # Is not introduced
-  family_data_bad <- family_data_bad[!family_data_bad$dist.check %in% "introduced", ]
-  # Has at least a country name...
-  family_data_bad <- family_data_bad[!family_data_bad$country.new %in% c(NA, ""), ]
-  
-  if(dim(family_data_bad)[1] == 0){
-    next
-  }
-  
-  # family_data_bad$is_nt <- TRUE
-  
-  # Now, filter out which one of these are already in final_df and keep only registers
-  # that can increase the checklist size
-  family_data_good <- final_df[final_df$family %in% i, ]
-  family_data_final <- family_data_bad[!family_data_bad$ids %in% family_data_good$ids, ]
-  
-  if(dim(family_data_final)[1] == 0){
-    next
-  }
-  
-  # Assign a biome and realm, whenever possible
-  # Make my match
-  family_data_final$loc.correct.state <- NA
-  family_data_final$loc.correct.state <- sapply(family_data_final$loc.correct1, function(x) {
-    parts <- unlist(strsplit(x, "_"))
-    if (length(parts) >= 2) {
-      return(paste(parts[1], parts[2], sep = "_"))
-    } else {
-      return(parts[1])
-    }
-  }, USE.NAMES = FALSE)
-  
-  family_data_final <- dplyr::left_join(family_data_final,
-                                        latam_class[, c("NAME_all", "our_efg_new",
-                                                        "Morrone_re_new")],
-                                        by = c("loc.correct.state" = "NAME_all"))
-  
-  if(dim(family_data_final)[1] == 0){
-    next
-  }
-  
-  # Save
-  family_data_final[] <- apply(family_data_final, 2, as.character)
-  bad_list[[i]] <- family_data_final
-}
-
-# Bind it all
-bad_list <- dplyr::bind_rows(bad_list)
-bad_list$checklist_source <- "others"
-names(bad_list)[which(names(bad_list) == "our_efg_new")] <- "our_efg"
-# Re-run the new checkDist
-bad_list$dist.check <- NULL
-# New one
-# Temporary location column with country/state names as written in WGSRPD
-loc_state <- sub("^([^_]*_[^_]*).*", "\\1", bad_list$loc.correct1)
-fix_these <- grepl("_", loc_state) & loc_state %in% names(loc_alias)
-bad_list$loc.dist <- bad_list$loc.correct1
-bad_list$loc.dist[fix_these] <- paste0(sub("_.*", "_", loc_state[fix_these]),
-                                       loc_alias[loc_state[fix_these]],
-                                       sub("^[^_]*_[^_]*", "", bad_list$loc.correct1[fix_these]))
-loc_country <- sub("_.*", "", bad_list$loc.dist)
-fix_these <- loc_country %in% names(loc_alias)
-bad_list$loc.dist[fix_these] <- paste0(loc_alias[loc_country[fix_these]],
-                                       sub("^[^_]*", "", bad_list$loc.dist[fix_these]))
-bad_list <- plantR::checkDist(x = bad_list,
-                              tax.name = "taxonName",
-                              tax.author = "taxonAuthor",
-                              loc = "loc.dist",
-                              source = "wcvp")
-bad_list$loc.dist <- NULL
-
-# Finally, assign the location as Neotropical or not (is_nt) based on Morrone_re_new
-bad_list$is_nt <- bad_list$Morrone_re_new %in% "Neotropical"
-
-# Drop this two columns now
-bad_list$Morrone_re_new <- NULL
-bad_list$our_efg_new <- NULL
-
-# table(bad_list$is_nt, useNA = 'ifany')
-##### Save again #####
-saveRDS(bad_list, here::here("data", "derived-data", "rds", "supp_data_for_endemics.rds"))
-
 
 # New start here! ---------------------------------------------------------
 bad_list <- readRDS(here::here("data", "derived-data", "rds", "supp_data_for_endemics.rds"))
@@ -522,6 +336,21 @@ final_df_endemism$scientificName[get_these] <- orig_to_scientificNameFull[final_
 final_df_all <- final_df_all[final_df_all$tax.check1 %in% "high", ]
 final_df_richness_biome <- final_df_richness_biome[final_df_richness_biome$tax.check1 %in% "high", ]
 final_df_endemism <- final_df_endemism[final_df_endemism$tax.check1 %in% "high", ]
+
+# Records of the checklist dataset for the Zenodo deposit (13_zenodo_export.R):
+# dataset = "spatial" (spatial dataset) or "extra" (assigned through the
+# administrative unit only). Only the columns present in final_df_all are kept
+rec_cols <- c("numTombo", "collectionCode.new", "catalogNumber", "basisOfRecord", "recordedBy.new",
+              "recordNumber.new", "year.new", "family", "scientificName", "taxonName", "taxonAuthor",
+              "country.new", "stateProvince.new", "municipality.new", "locality.new", "loc.correct1",
+              "resolution.gazetteer", "decimalLatitude.new1", "decimalLongitude.new1", "is_nt", "our_efg",
+              "tax.check1", "dist.check")
+cat("Columns not found:", setdiff(rec_cols, names(final_df_all)), "\n")
+checklist_records <- final_df_all[, intersect(rec_cols, names(final_df_all))]
+checklist_records$dataset <- ifelse(final_df_all$checklist_source %in% "interpolation", "spatial", "extra")
+print(table(checklist_records$dataset))
+saveRDS(checklist_records, here::here("data", "derived-data", "rds", "checklist_records.rds"))
+rm(rec_cols, checklist_records)
 
 ##### Save the final_df_endemism checklist #####
 checklists <- list()
@@ -864,6 +693,9 @@ biome_tab$end_lvl <- 100 * (biome_tab$species / biome_tab$richness)
 names(biome_tab) <- c("biome", "spp_rich", "spp_end", "end_level")
 biome_tab <- biome_tab[order(biome_tab$spp_rich, decreasing = TRUE), ]
 biome_tab$end_level <- round(biome_tab$end_level, 2)
+# Biomes with no endemics: 0 instead of NA
+biome_tab$spp_end[is.na(biome_tab$spp_end)] <- 0
+biome_tab$end_level[is.na(biome_tab$end_level)] <- 0
 writexl::write_xlsx(biome_tab, file.path("outputs", "tables", "efg_tab.xlsx"))
 
 ##### Biome summary #####
@@ -888,6 +720,9 @@ final_df_all1 <- final_df_all1[final_df_all1$is_nt %in% TRUE, ]
 final_df_all1$scientificName <- NULL
 names(final_df_all1)[which(names(final_df_all1) == "taxonName")] <- "scientificName"
 names(final_df_all1)[which(names(final_df_all1) == "taxonAuthor")] <- "scientificNameAuthorship"
+# numTombo is not unique (e.g. "US_NA" for specimens without catalog number) and rmDup()
+# inside checkList() keeps only one record per numTombo, dropping unrelated species
+final_df_all1$numTombo <- make.unique(final_df_all1$numTombo)
 nt_checklist <- plantR::checkList(x = final_df_all1, n.vouch = 30, rm.dup = TRUE)
 # any(duplicated(nt_checklist$scientificName))
 
@@ -913,8 +748,8 @@ names(final_df_all2)[which(names(final_df_all2) == "taxonName")] <- "scientificN
 names(final_df_all2)[which(names(final_df_all2) == "taxonAuthor")] <- "scientificNameAuthorship"
 nt_checklist_end <- plantR::checkList(x = final_df_all2, n.vouch = 10, rm.dup = FALSE)
 
-# Keeping for the moment #
-# nt_checklist_end <- nt_checklist_end[!duplicated(nt_checklist_end$scientificName), ]
+# One row per species (author variants of the same binomial)
+nt_checklist_end <- nt_checklist_end[!duplicated(nt_checklist_end$scientificName), ]
 names(nt_checklist_end)[which(names(nt_checklist_end) == "scientificName")] <- "species"
 names(nt_checklist_end)[which(names(nt_checklist_end) == "scientificNameAuthorship")] <- "author"
 # Full names (species + author) of the Neotropical endemics, used in 12
@@ -930,7 +765,7 @@ arrow::write_parquet(final_df_all, sink = here::here("data",
                                                      "occ_records.parquet"))
 
 
-# Figure SY: records kept at each step (here because it needs the counts logged above)
+# Figure S1: records kept at each step (here because it needs the counts logged above)
 n_steps <- readxl::read_excel(here::here("outputs", "tables", "n_registers_by_family.xlsx"), sheet = "totals")
 n_log <- as.data.frame(data.table::fread(here::here("outputs", "n_registers_log.txt")))
 n_log <- n_log[n_log$family %in% "ALL", ]
@@ -957,7 +792,7 @@ flow_edges$pct[c(10, 12, 13)] <- NA
 flow_edges <- cbind(flow_edges,
                     x = flow_nodes$x[flow_edges$from], y = flow_nodes$y[flow_edges$from] - 0.3,
                     xend = flow_nodes$x[flow_edges$to], yend = flow_nodes$y[flow_edges$to] + 0.3)
-p_figSY <- ggplot2::ggplot() +
+p_figS1 <- ggplot2::ggplot() +
   ggplot2::geom_segment(data = flow_edges,
                         ggplot2::aes(x = x, y = y, xend = xend, yend = yend),
                         arrow = grid::arrow(length = grid::unit(0.15, "cm"), type = "closed")) +
@@ -968,6 +803,139 @@ p_figSY <- ggplot2::ggplot() +
   ggplot2::geom_label(data = flow_nodes, ggplot2::aes(x = x, y = y, label = text), size = 3.8) +
   ggplot2::scale_x_continuous(limits = c(0.4, 2.6)) +
   ggplot2::theme_void(base_size = 15)
-ggplot2::ggsave(here::here("figures", "FigureSY.svg"), p_figSY, width = 10, height = 8, bg = "white")
-ggplot2::ggsave(here::here("figures", "FigureSY.png"), p_figSY, width = 10, height = 8, dpi = 300, bg = "white")
+ggplot2::ggsave(here::here("figures", "FigureS1.svg"), p_figS1, width = 10, height = 8, bg = "white")
+ggplot2::ggsave(here::here("figures", "FigureS1.png"), p_figS1, width = 10, height = 8, dpi = 300, bg = "white")
+# PDF (vector) for PNAS
+ggplot2::ggsave(here::here("figures", "FigureS1.pdf"), p_figS1, width = 10, height = 8, bg = "white")
 rm(n_steps, n_log, flow_nodes, flow_edges)
+
+# Species without a biome --------------------------------------------------
+# Species of the tropical American checklist (with curated records in tropical
+# America) that could not be assigned to any biome, neither by their records nor by
+# the vegetation type/domain of the FFB and taxonomy sources
+unk <- final_df_all[final_df_all$is_nt %in% TRUE &
+                      !final_df_all$taxonName %in% final_df_richness_biome$taxonName, ]
+unk_tab <- do.call(rbind, lapply(split(unk, unk$taxonName), function(x)
+  data.frame(family = x$family[1],
+             species = paste(unique(x$scientificName), collapse = " | "),
+             author = x$taxonAuthor[1],
+             n_records = nrow(x),
+             countries = paste(sort(unique(stats::na.omit(x$country.new))), collapse = "|"),
+             biome_status = "biome_unknown")))
+unk_tab <- unk_tab[order(unk_tab$family, unk_tab$species), ]
+writexl::write_xlsx(unk_tab, here::here("outputs", "tables", "biome_unknown.xlsx"))
+rm(unk)
+
+# Probable occurrences: species without curated records in tropical America --
+# Accepted tree species of the Americas (Taxonomy checklist) with no curated record
+# in tropical America (as the 'probable occurrences' of Lima et al. 2020). Their
+# native range in the WCVP (botanical countries, WGSRPD level 3) is crossed with our
+# tropical America: a botanical country is tropical if >= 90% of its area is inside
+# tropical America (same threshold used for endemism and administrative units),
+# extra-tropical if <= 10%, and transitional otherwise
+no_rec <- our_names[our_names$our_accepted_taxonRank %in% "species" &
+                      !our_names$our_accepted_taxonName %in%
+                      final_df_all$taxonName[final_df_all$is_nt %in% TRUE], ]
+no_rec <- no_rec[!duplicated(no_rec$our_accepted_taxonName), ]
+# WCVP accepted ID of each binomial (accepted names first; synonyms point to their accepted name)
+wcvp <- rWCVPdata::wcvp_names[rWCVPdata::wcvp_names$taxon_name %in% no_rec$our_accepted_taxonName, ]
+wcvp <- wcvp[order(wcvp$taxon_name, !wcvp$taxon_status %in% "Accepted"), ]
+wcvp <- wcvp[!duplicated(wcvp$taxon_name), ]
+wcvp$acc_id <- ifelse(is.na(wcvp$accepted_plant_name_id), wcvp$plant_name_id, wcvp$accepted_plant_name_id)
+no_rec$acc_id <- wcvp$acc_id[match(no_rec$our_accepted_taxonName, wcvp$taxon_name)]
+# Native, extant and certain distribution only
+dist <- rWCVPdata::wcvp_distributions
+dist <- dist[dist$plant_name_id %in% no_rec$acc_id & dist$introduced %in% 0 &
+               dist$extinct %in% 0 & dist$location_doubtful %in% 0, ]
+# Share of each American botanical country inside tropical America
+ta <- terra::vect(here::here("data", "derived-data", "maps", "NTAmericas_efgs.shp"))
+ta <- terra::aggregate(terra::project(ta[ta$Morrone_re %in% "Neotropical", ], "epsg:4326"))
+l3 <- terra::makeValid(terra::vect(rWCVPdata::wgsrpd3))
+l3 <- l3[l3$LEVEL1_COD %in% c(7, 8), ]
+l3_in <- terra::intersect(l3, ta)
+area_in <- tapply(terra::expanse(l3_in, unit = "km"), l3_in$LEVEL3_COD, sum)
+area_l3 <- tapply(terra::expanse(l3, unit = "km"), l3$LEVEL3_COD, sum)
+l3_share <- stats::setNames(rep(0, length(area_l3)), names(area_l3))
+l3_share[names(area_in)] <- area_in / area_l3[names(area_in)]
+# NA for botanical countries outside the Americas
+dist$share_ta <- as.numeric(l3_share[dist$area_code_l3])
+# Taxonomy sources listing each species (union over all its input names)
+src_names <- tapply(our_names$source, our_names$our_accepted_taxonName, function(z)
+  paste(sort(unique(unlist(strsplit(z, " | ", fixed = TRUE)))), collapse = " | "))
+no_rec_tab <- do.call(rbind, lapply(seq_len(nrow(no_rec)), function(i) {
+  d <- dist[dist$plant_name_id %in% no_rec$acc_id[i], ]
+  s <- d$share_ta[!is.na(d$share_ta)]
+  data.frame(family = no_rec$our_accepted_taxonFamily[i],
+             species = no_rec$our_accepted_scientificName[i],
+             sources = src_names[[no_rec$our_accepted_taxonName[i]]],
+             wcvp_areas = paste(sort(unique(d$area)), collapse = "|"),
+             max_share_tropical_america = if (length(s) > 0) round(max(s), 3) else NA,
+             status = if (nrow(d) == 0) "No WCVP native distribution"
+                      else if (length(s) == 0) "Outside the Americas"
+                      else if (max(s) >= 0.9) "Probable occurrence"
+                      else if (max(s) > 0.1) "Transitional"
+                      else if (all(d$continent_code_l1[!is.na(d$share_ta)] %in% 7)) "Extra-tropical (North America)"
+                      else "Extra-tropical (southern South America)",
+             distribution_sources = no_rec$geographicalDistribution_aggregated[i],
+             domain_sources = no_rec$domain_aggregated[i])
+}))
+no_rec_tab <- no_rec_tab[order(no_rec_tab$status, no_rec_tab$family, no_rec_tab$species), ]
+writexl::write_xlsx(no_rec_tab, here::here("outputs", "tables", "probable_occurrence.xlsx"))
+print(table(no_rec_tab$status))
+rm(no_rec, wcvp, dist, ta, l3, l3_in, area_in, area_l3, l3_share, src_names)
+
+# Numbers for the manuscript ----------------------------------------------
+n_log <- as.data.frame(data.table::fread(here::here("outputs", "n_registers_log.txt")))
+n_log <- n_log[n_log$family %in% "ALL" & grepl("^11_", n_log$step), ]
+n_log <- n_log[!duplicated(n_log$step, fromLast = TRUE), ]
+spp_nt <- unique(final_df_all$taxonName[final_df_all$is_nt %in% TRUE])
+# Species of tropical America (binomials, as in n_spp_TA) with at least one biome
+n_assigned <- length(intersect(spp_nt, final_df_richness_biome$taxonName))
+top3 <- biome_tab[match(c("Tropical-subtropical lowland rainforests", "Tropical-subtropical montane rainforests",
+                          "Tropical-subtropical dry forests and thickets"), biome_tab$biome), ]
+dir.create(here::here("outputs", "numbers"), showWarnings = FALSE, recursive = TRUE)
+utils::write.csv(data.frame(key = c(paste0("n_", n_log$step),
+                                    "n_spp_TA", "n_genera_TA", "n_families_TA", "pct_world_trees",
+                                    "pct_increase_gts", "n_endemic_TA", "pct_endemic_TA", "pct_pure_endemic",
+                                    "pct_near_endemic", "n_single_source", "pct_single_source",
+                                    "n_spp_assigned_biome", "pct_spp_assigned_biome", "n_spp_biome_unknown", "n_spp_no_records_TA", "n_spp_probable_occurrence", "n_single_biome_endemics",
+                                    "pct_single_biome_endemics", "pct_spp_lowland", "pct_sbe_lowland",
+                                    "pct_sbe_top3",
+                                    paste0(rep(c("n_spp_", "n_end_"), each = 3), make.names(top3$biome))),
+                            value = c(n_log$n_registers,
+                                      length(spp_nt),
+                                      length(unique(gsub(" .*", "", final_df_all$scientificName[final_df_all$is_nt %in% TRUE]))),
+                                      length(unique(final_df_all$family[final_df_all$is_nt %in% TRUE])),
+                                      100 * length(spp_nt) / 57598,
+                                      100 * (length(spp_nt) / 23616 - 1),
+                                      all_end, 100 * all_end / length(spp_nt),
+                                      100 * pure_end / all_end, 100 * (1 - pure_end / all_end),
+                                      length(single_source_names_acc),
+                                      100 * length(single_source_names_acc) / nrow(name_counts_acc),
+                                      n_assigned, 100 * n_assigned / length(spp_nt), nrow(unk_tab), nrow(no_rec_tab), sum(no_rec_tab$status %in% "Probable occurrence"),
+                                      sum(biome_tab$spp_end),
+                                      100 * sum(biome_tab$spp_end) / n_assigned,
+                                      100 * top3$spp_rich[1] / n_assigned,
+                                      100 * top3$spp_end[1] / sum(biome_tab$spp_end),
+                                      100 * sum(top3$spp_end) / sum(biome_tab$spp_end),
+                                      top3$spp_rich, top3$spp_end),
+                            description = c(paste("Records:", n_log$step),
+                                            "Tree species in tropical America", "Genera", "Families",
+                                            "% of the 57,598 tree species on Earth (GTS)",
+                                            "% increase over the 23,616 species accepted for the region",
+                                            "Species endemic to tropical America", "% endemic",
+                                            "% of endemics that are pure-endemics", "% near-endemics",
+                                            "Accepted names listed by a single source",
+                                            "% of accepted names listed by a single source",
+                                            "Species assigned to a biome", "% of species assigned to a biome",
+                                            "Species with records in tropical America but without a biome (biome_unknown.xlsx)",
+                                            "Accepted tree species of the Americas without curated records in tropical America (probable_occurrence.xlsx)",
+                                            "Probable occurrences: no curated records, WCVP native range in tropical America (>= 90% of a botanical country)",
+                                            "Single-biome endemics (Table 1 total)",
+                                            "% single-biome endemics (of species assigned to a biome)",
+                                            "% of assigned species in lowland rainforests",
+                                            "% of single-biome endemics in lowland rainforests",
+                                            "% of single-biome endemics in the three top biomes",
+                                            paste(rep(c("Species in", "Endemics of"), each = 3), top3$biome))),
+                 here::here("outputs", "numbers", "10_preparing_checklist.csv"), row.names = FALSE)
+rm(n_log, spp_nt, n_assigned, top3, unk_tab, no_rec_tab)
