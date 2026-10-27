@@ -1,6 +1,6 @@
 Package: Endemism
 Type: Package
-Title: The Title of the Project
+Title: Tree Endemism Across Tropical American Biomes
 Version: 0.0.0.9000
 Authors@R: c(
     person(given   = "Guilherme",
@@ -8,11 +8,48 @@ Authors@R: c(
            role    = c("aut", "cre", "cph"),
            email   = "ggrittz@usp.br",
            comment = c(ORCID = "0000-0001-6500-4422")))
-Description: A paragraph providing a full description of the project (on 
-    several lines...)
+Description: Research compendium for the paper "A biome lens is critical to
+    understanding tree endemism across tropical America". Cleans herbarium
+    records of tropical American trees, assigns them to biomes (IUCN EFGs),
+    and maps weighted endemism and critical centers of endemism.
 URL: https://github.com/ggrittz/Endemism
 BugReports: https://github.com/ggrittz/Endemism/issues
 License: GPL (>= 2)
+Imports:
+    adehabitat,
+    arrow,
+    automap,
+    ConR,
+    countrycode,
+    cowplot,
+    data.table,
+    devtools,
+    dplyr,
+    geosphere,
+    ggplot2,
+    ggspatial,
+    googlesheets4,
+    gstat,
+    here,
+    plantR,
+    plantRdata,
+    plyr,
+    propagate,
+    raster,
+    readxl,
+    rWCVPdata,
+    scales,
+    sf,
+    simba,
+    sp,
+    terra,
+    tidyr,
+    writexl
+Remotes:
+    github::LimaRAF/plantR@b312b7a,
+    github::matildabrown/rWCVPdata,
+    url::https://cran.r-project.org/src/contrib/Archive/simba/simba_0.3-5.tar.gz,
+    url::https://cran.r-project.org/src/contrib/Archive/adehabitat/adehabitat_1.8.20.tar.gz
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
