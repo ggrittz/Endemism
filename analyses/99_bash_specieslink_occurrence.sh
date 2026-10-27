@@ -30,9 +30,11 @@ BASE_LINK="https://specieslink.net/search/download/20260921082144-0027476"
 N_PARTS=6
 MIN_PART_SIZE=1000000000   # every part except the last should be at least this big (~1 GB)
 MAX_TRIES=20               # max download/resume attempts per part
-OUT_DIR="/c/Users/ggrittz/Desktop/data/speciesLink_data"   # = C:/Users/ggrittz/Desktop/data/speciesLink_data (read by 01_prepare_splink_data.R)
-TMP_DIR="$OUT_DIR/tmp"
-SPECS_FILE="/g/Outros computadores/Meu laptop (1)/Doutorado/SynTreeSys/Endemism/data/derived-data/spp_names.txt"
+OUT_DIR="$(cd "$(dirname "$0")/.." && pwd)/data/raw-data/speciesLink"   # Endemism/data/raw-data/speciesLink (filtered output only)
+# Raw parts (~1 GB each) are downloaded outside the project and deleted after filtering;
+# another location can be given with: TMP_DIR=/path bash 99_bash_specieslink_occurrence.sh
+TMP_DIR="${TMP_DIR:-/c/Users/ggrittz/Desktop/data/speciesLink_data/tmp}"
+SPECS_FILE="$(cd "$(dirname "$0")/.." && pwd)/data/derived-data/spp_names.txt"
 FILTERED_OUTPUT="$OUT_DIR/speciesLink_occurrences.txt"
 FINAL_OUTPUT="$OUT_DIR/speciesLink_occurrences.zip"
 
@@ -135,11 +137,10 @@ awk -F'\t' '{print NF}' "$FILTERED_OUTPUT" | sort -n | uniq -c
 
 # Step 5: Zip the final output
 # -j stores only the file name inside the zip (not the full c/Users/... path)
-# The .txt is only deleted if the zip was created successfully
+# The .txt is kept: it is read by 01_prepare_splink_data.R
 rm -f "$FINAL_OUTPUT"
 if zip -j "$FINAL_OUTPUT" "$FILTERED_OUTPUT"; then
-  rm "$FILTERED_OUTPUT"
-  echo "Process completed. Total records: $((N_AFTER - 1)). The final zipped output is: $FINAL_OUTPUT"
+  echo "Process completed. Total records: $((N_AFTER - 1)). Outputs: $FILTERED_OUTPUT and $FINAL_OUTPUT"
 else
   echo "ERROR: zip failed. The unzipped file was kept at: $FILTERED_OUTPUT" >&2
 fi

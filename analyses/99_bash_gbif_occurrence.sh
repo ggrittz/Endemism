@@ -13,13 +13,16 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------- variables --
-# Windows path C:\Users\... is written as /c/Users/... inside MSYS2
-GBIF_DIR="/c/Users/ggrittz/Desktop/data/gbif_data"
-OCCURRENCE_FILE="$GBIF_DIR/occurrence.txt"
+# The raw download (~700 GB) stays outside the project; only the filtered
+# output goes to Endemism/data/raw-data/GBIF (read by 01_prepare_gbif_data.R).
+# Another raw location can be given with: OCCURRENCE_FILE=/path/occurrence.txt bash 99_bash_gbif_occurrence.sh
+# (Windows path C:\Users\... is written as /c/Users/... inside MSYS2)
+OCCURRENCE_FILE="${OCCURRENCE_FILE:-/c/Users/ggrittz/Desktop/data/gbif_data/occurrence.txt}"
+GBIF_DIR="$(cd "$(dirname "$0")/.." && pwd)/data/raw-data/GBIF"
 SPECS_FILE="../data/derived-data/spp_names.txt"   # one name per line (relative to analyses/)
-OUTPUT_TXT="$GBIF_DIR/filtered_occurrence.txt"    # saved next to occurrence.txt
+OUTPUT_TXT="$GBIF_DIR/filtered_occurrence.txt"    # read by 01_prepare_gbif_data.R
 FINAL_OUTPUT="$GBIF_DIR/final_occurrence.zip"
-KEEP_TXT=false                                    # true = keep the unzipped .txt too
+KEEP_TXT=true                                     # 01_prepare_gbif_data.R reads the .txt
 
 # A row is kept if the name in ANY of these columns matches a name in the list.
 # The match ignores authorship: "Myrcia splendens (Sw.) DC." matches "Myrcia splendens".
