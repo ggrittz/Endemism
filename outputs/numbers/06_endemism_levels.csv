@@ -1,0 +1,5 @@
+"key","value","description"
+"n_records_downloaded",62446191,"Records downloaded (before removing duplicates)"
+"n_records_nondup",41657030,"Records after removing duplicates"
+"pct_records_country_level",80.2995340762412,"% of non-duplicate records validated only at the country level"
+"n_records_spatial",1155037,"Records in the spatial dataset"

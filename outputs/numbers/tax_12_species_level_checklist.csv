@@ -1,0 +1,6 @@
+"key","value","description"
+"tax_n_accepted_tree_species",31381,"Accepted tree species (species level) for the Americas"
+"tax_pct_wfo",99.6622159905675,"% of accepted tree species from WFO"
+"tax_pct_wcvp",0.267677894267232,"% from WCVP"
+"tax_pct_ffb",0.0701061151652274,"% from FFB"
+"tax_n_non_wfo",106,"Accepted tree species from WCVP or FFB"

@@ -1,0 +1,4 @@
+"key","value","description"
+"n_records_endemism_def",1125586,"Records left after applying the endemism definition (final_df)"
+"n_records_we",1122549,"Records used in the WE map of tropical America"
+"n_spp_we",22970,"Species endemic to tropical America used in the WE map"

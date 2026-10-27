@@ -1,20 +1,22 @@
-#### MAIN METHODS AND RESULTS FROM THE EVALUATION OF THE SPECIES ACCUMULATION CURVE (from code: 12_species_accumulation.r) ####
+#### MAIN METHODS AND RESULTS FROM THE EVALUATION OF THE SPECIES ACCUMULATION CURVE (from code: 11_species_accumulation.R) ####
 
-We obtained from the WCVP backbone (version X) the date of first publication for each species. 
+We obtained from the WCVP backbone (rWCVPdata version 0.8.0) the date of first publication for each species. 
 This date corresponded to the oldest date of publication when accepted names contained basionyms or synonyms published prior to the accepted name.
 
-We then calculated the cumulative number of known species each year until 2022.
+We then calculated the cumulative number of known species each year until 2024.
 
+Next we fitted different candidate non-linear function to describe the species accumulation curve using the function nls() from base R (cite R).
+The candidate models were: linear, exponential, quadratic, general_logistic, saturating, ricker, general_ricker
 
-The non-linear Generalized Ricker model (i.e. species ~ b * (years/a * exp(1 - years/a))^alpha), was the one that by far presented the vest fit to the species accumulation curve.
+The non-linear Generalized Ricker model (i.e. species ~ b * (years/a * exp(1 - years/a))^alpha), was the one that by far presented the best fit to the species accumulation curve.
 
 general_ricker dAIC: 0
-quadratic dAIC: 306.17
-general_logistic dAIC: 394.35
-ricker dAIC: 578.23
-linear dAIC: 832.6
-exponential dAIC: 976.56
-saturating dAIC: 1891.4
+quadratic dAIC: 305.49
+general_logistic dAIC: 392.51
+ricker dAIC: 577.66
+linear dAIC: 832.14
+exponential dAIC: 974.24
+saturating dAIC: 1888.91
 general_ricker df: 4
 quadratic df: 4
 general_logistic df: 4
@@ -30,5 +32,5 @@ Using the function predictNLS() of the package propagate (Spiess, A. (2025). pro
 
 The earliest species in our study area were described in 1753. The rate of species described each year increased until the early 20s of the last century, when the rate started to decrease. 
 
-However, we estimated that there still are 17384 tree species to be discovered in tropical America, a feat that will result in a total of 42891 tree species [95% CI: 40166-46243] and that will not be achieved before the year of 2347 [95% CI: 2311-2390], given the historical rate of species discovery.
+However, we estimated that there still are 17282 tree species to be discovered in tropical America, a feat that will result in a total of 42819 tree species [95% CI: 40103-46160] and that will not be achieved before the year of 2330 [95% CI: 2294-2373], given the historical rate of species discovery.
 

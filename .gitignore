@@ -20,3 +20,13 @@ data/
 .secrets
 .positai
 .Rproj.user
+# Large or manuscript-only outputs ----
+outputs/zenodo/
+outputs/PNAS_manuscript/
+figures/*.svg
+outputs/FigureXX.pdf
+# Temporary files ----
+~$*
+~WRL*.tmp
+desktop.ini
+*.gdoc
