@@ -47,7 +47,7 @@ devtools::load_all()
 # # Necessary step due to registers without author name in speciesLink data
 # library(plantRdata)
 # data(wfoNames) # is this the right way to call it?
-# file_path2 <- "C:/Users/ggrittz/Desktop/data/speciesLink_data/speciesLink_occurrences.txt"
+# file_path2 <- here::here("data", "raw-data", "speciesLink", "speciesLink_occurrences.txt")
 # splink_data <- data.table::fread(file_path2)
 # splink_data <- as.data.frame(splink_data)
 # # ID for later use
@@ -74,14 +74,14 @@ devtools::load_all()
 # 
 # # Save
 # data.table::fwrite(splink_data, 
-#                    file = "C:/Users/ggrittz/Desktop/data/speciesLink_data/speciesLink_occurrence_filtered_new.txt")
+#                    file = here::here("data", "raw-data", "speciesLink", "speciesLink_occurrence_filtered.txt"))
 ##### ALREADY PERFORMED ABOVE #####
 
 
 # Preparing speciesLink data ----------------------------------------------
 
 # speciesLink data (read once; filtered by family inside the loop)
-file_path2 <- "C:/Users/ggrittz/Desktop/data/speciesLink_data/speciesLink_occurrence_filtered_new.txt"
+file_path2 <- here::here("data", "raw-data", "speciesLink", "speciesLink_occurrence_filtered.txt")
 splink_all <- data.table::fread(file_path2)
 
 # Loop over our accepted families: the family written in speciesLink is messy

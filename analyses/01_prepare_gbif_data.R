@@ -46,7 +46,7 @@ loc_alias <- setNames(loc_alias$taxon.distribution.bru, loc_alias$loc)
 # Preparing GBIF data -----------------------------------------------------
 # GBIF data
 # file_path2 <- "D:/gbif_occurrences.txt"
-file_path2 <- "C:/Users/ggrittz/Desktop/data/gbif_data/filtered_occurrence.txt"
+file_path2 <- here::here("data", "raw-data", "GBIF", "filtered_occurrence.txt")
 
 # Loop over the families as written in the GBIF file (column $18), since GBIF
 # families may differ from our accepted families; records are saved by our

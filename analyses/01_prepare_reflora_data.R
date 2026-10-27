@@ -39,7 +39,7 @@ loc_alias <- read.csv(here::here("data", "derived-data", "plantR_loc_alias.csv")
 loc_alias <- setNames(loc_alias$taxon.distribution.bru, loc_alias$loc)
 
 # Loading data (already prepared)
-file_path2 <- "C:/Users/ggrittz/Desktop/data/reflora_data/reflora_occurrence_filtered_new.txt"
+file_path2 <- here::here("data", "raw-data", "REFLORA", "reflora_occurrence_filtered.txt")
 reflora_data <- as.data.frame(data.table::fread(file_path2))
 
 

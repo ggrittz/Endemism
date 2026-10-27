@@ -27,7 +27,7 @@ worldMap <- plantR::worldMap
 ##### Already performed #####
 # Loading data
 # file_path2 <- "D:/jabot_occurrences.txt"
-file_path2 <- "C:/Users/ggrittz/Desktop/data/jabot_data/jabot_occurrences.txt"
+file_path2 <- here::here("data", "raw-data", "JABOT", "jabot_occurrences.txt")
 jabot_data <- as.data.frame(data.table::fread(file_path2))
 
 ##### Already performed #####
@@ -70,11 +70,11 @@ jabot_data$county <- NA
 jabot_data <- jabot_data[!is.na(jabot_data$scientificName), ]
 
 # Save
-data.table::fwrite(jabot_data, file = "C:/Users/ggrittz/Desktop/data/jabot_data/jabot_occurrence_filtered_new.txt")
+data.table::fwrite(jabot_data, file = here::here("data", "raw-data", "JABOT", "jabot_occurrence_filtered.txt"))
 
 # New start from here
 # Loading data (already prepared)
-file_path2 <- "C:/Users/ggrittz/Desktop/data/jabot_data/jabot_occurrence_filtered_new.txt"
+file_path2 <- here::here("data", "raw-data", "JABOT", "jabot_occurrence_filtered.txt")
 jabot_data <- as.data.frame(data.table::fread(file_path2))
 
 ##### Fix plantR's collection codes table (run once, before the loop) #####
