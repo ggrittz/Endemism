@@ -53,7 +53,7 @@ to final figures and tables, all results of the paper:
 - **Biome assignment:** ecoregions converted into EFGs through a
   classification table built by SynTreeSys members.
 - **Endemism:** endemism levels per biome, weighted endemism with a null
-  model, rarefaction and kriging, critical centers of endemism (cells
+  model, sampling completeness and kriging, critical centers of endemism (cells
   with kriged WE values above the 90th percentile).
 - **Species discovery:** description curve of tropical American
   endemics.
@@ -123,9 +123,12 @@ To install this compendium:
   `remotes::install_github("LimaRAF/plantR@b312b7a")`
 - plantRdata 0.0.11 and rWCVPdata 0.8.0
 - Other packages (installed from `DESCRIPTION` by `make.R`): terra, sf,
-  gstat, automap, ConR, data.table, dplyr, tidyr, arrow, ggplot2,
-  cowplot, ggspatial, MetroBrewer, nls.multstart, propagate,
-  countrycode, readxl, writexl, googlesheets4, here
+  raster, sp, gstat, automap, ConR, data.table, dplyr, tidyr, plyr, arrow,
+  ggplot2, cowplot, ggspatial, scales, propagate, countrycode, readxl,
+  writexl, googlesheets4, here
+- simba, adehabitat and geosphere (required by `99_WE.R`); simba and
+  adehabitat were archived on CRAN and are installed from the CRAN
+  archive (`Remotes` in `DESCRIPTION`)
 - A bash shell with `awk` (used to split the GBIF download by family)
 - ~**\[add\]** GB of free disk space for raw and derived data
 
@@ -146,28 +149,58 @@ source("make.R")
 - All required packages and R functions will be loaded
 - Some analyses listed in the `make.R` might take time
 
-**Input data.** Before running, place the raw downloads in
-`data/raw-data/`: the GBIF download (DOI:
-<https://doi.org/10.15468/DL.E39T7B>), JABOT and REFLORA IPT downloads
-(`analyses/00_dl_jabot_data.R`, `analyses/00_dl_reflora_data.R`),
-speciesLink (`analyses/99_bash_specieslink_occurrence.sh`), the Flora e
-Funga do Brasil vouchers (`analyses/00_prepare_ffb_vouchers.R`), and the
+**Input data.** Raw downloads go to `data/raw-data/`: the GBIF download
+(DOI: https://doi.org/10.15468/DL.E39T7B; filtered by
+`analyses/99_bash_gbif_occurrence.sh`) in `GBIF/`, JABOT and REFLORA IPT
+downloads (`analyses/00_dl_jabot_data.R`, `analyses/00_dl_reflora_data.R`)
+in `JABOT/` and `REFLORA/`, speciesLink
+(`analyses/99_bash_specieslink_occurrence.sh`) in `speciesLink/`, and the
 maps listed in `analyses/03_prepare_TAmap.R`. The species list
-(`checklist_species_level.rds`) comes from SynTreeSys/Taxonomy. `make.R`
-downloads the ecoregion -\> EFG table from Google Sheets (requires
-authentication with access to the sheet).
+(`checklist_species_level.rds`, `spp_names.txt`) and the list of families
+(`family_names.rds`) are copied to `data/derived-data/` by the `make.R` of
+[SynTreeSys/Taxonomy](https://github.com/synTreeSys/Taxonomy), which must sit
+next to this repository (`../Taxonomy`, also read for the Flora e Funga do
+Brasil data). `make.R` downloads the ecoregion -> EFG table from Google
+Sheets (requires authentication with access to the sheet).
+
+**Raw vs. filtered files.** The raw GBIF download (`occurrence.txt`, ~700 GB)
+and the raw speciesLink parts are too large to keep inside the project, so
+only their filtered versions live in `data/raw-data/`. The two bash scripts
+read the raw data from outside the project and write the filtered files
+into it:
+
+- `analyses/99_bash_gbif_occurrence.sh` reads `occurrence.txt` from the path
+  in `OCCURRENCE_FILE` and writes `data/raw-data/GBIF/filtered_occurrence.txt`
+- `analyses/99_bash_specieslink_occurrence.sh` downloads the speciesLink
+  parts to `TMP_DIR` (deleted after filtering) and writes
+  `data/raw-data/speciesLink/speciesLink_occurrences.txt`, which the
+  (already run) first block of `01_prepare_splink_data.R` turns into
+  `speciesLink_occurrence_filtered.txt`
+
+Both paths can be changed when running the scripts from `analyses/` in a
+bash shell (e.g. MSYS2 on Windows), for example:
+
+``` bash
+OCCURRENCE_FILE=/path/to/occurrence.txt bash 99_bash_gbif_occurrence.sh
+TMP_DIR=/path/to/tmp bash 99_bash_specieslink_occurrence.sh
+```
+
+JABOT and REFLORA downloads are small and stay in `data/raw-data/JABOT/`
+and `data/raw-data/REFLORA/` (zip per herbarium plus the merged file).
 
 **Workflow** (run in this order):
 
 | Script | What it does | Main outputs |
 |----|----|----|
-| `01_prepare_{gbif,jabot,reflora,splink}_data.R` | Filter records to the tree list and clean them with plantR, family by family | `data/derived-data/*_occ/` |
+| `00_prepare_ffb_vouchers.R` | Vouchers of Flora e Funga do Brasil names (used to flag high-confidence identifications) | `rds/ffb_vouchers.rds` |
+| `01_prepare_{gbif,jabot,reflora,splink}_data.R` | Filter records to the tree list and clean them with plantR (including `checkDist`), family by family | `data/derived-data/*_occ/` |
 | `02_removing_duplicates.R` | Merge the four sources and remove duplicates | `Cleaned_occs/`, `outputs/n_registers_log.txt` |
 | `03_prepare_TAmap.R` | Build the map of tropical American biomes (ecoregions -\> EFGs) | `maps/NTAmericas_*` |
+| `00_prepare_wdpa.R` | Download and filter WDPA protected areas (IUCN Ia-III, terrestrial) in tropical America | `maps/tropicalAmerica_WDPA_Feb2026_cleaned.shp` |
 | `04_crossing_maps.R` | Cross administrative units (GADM) with biomes | `maps/latamMap_classified.gpkg` |
-| `05_endemism_levels.R` | Validate records (checkDist, outliers) and assign biome endemism levels | `Endemic_species/` (emptied at start) |
+| `05_endemism_levels.R` | Flag spatial outliers (robust Mahalanobis distance combined with `checkDist`) and assign biome endemism levels | `Endemic_species/` (emptied at start) |
 | `06_calculate_wee.R` | Weighted endemism at 0.5° and null model | `rds/we_map_area_*`, `rds/final_df.rds` |
-| `07_rarefy_interpolate_new.R` | Sampling completeness per cell (species accumulation curves) and ordinary kriging of WE and richness | `maps/interpolated_maps_*50km.tiff` |
+| `07_rarefy_interpolate.R` | Sampling completeness per cell (species accumulation curves) and ordinary kriging of WE and richness | `maps/interpolated_maps_*50km.tiff` |
 | `08_preparing_plots.R` | Figures 1-3, S3-S6, WE vs effort, critical centers of endemism | `figures/`, `outputs/tables/` |
 | `09_preparing_extra_records.R` | Records outside the spatial dataset that can enter the checklist by administrative unit | `rds/supp_data_for_endemics.rds` |
 | `10_preparing_checklist.R` | Checklists of richness and endemism per biome, Figure S1 | `outputs/tables/checklist_*`, `endemics_by_nt.xlsx` |
@@ -179,7 +212,7 @@ authentication with access to the sheet).
 is not part of the main run; it documents how the dry forest (T1.2)
 vs. thorny desert (T5.2) borderline was decided.
 
-Random steps use `set.seed(2026)`.
+Random steps use `set.seed(2026)` (null model in 06 and accumulation curves in 07).
 
 ## Citation
 

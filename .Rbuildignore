@@ -14,3 +14,5 @@
 ^README\.Rmd$
 ^README\.html$
 ^\.secrets$
+^\.positai$
+^\.claude$
