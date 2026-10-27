@@ -66,7 +66,7 @@ final figures and tables, all results of the paper:
   collector standardisation; duplicate removal; `checkDist` against WCVP
   native ranges; robust Mahalanobis outliers).
 - **Biome assignment:** ecoregions converted into EFGs through a
-  classification table built by SynTreeSys members.
+  classification table built by the authors.
 - **Endemism:** endemism levels per biome, weighted endemism with a null
   model, rarefaction and kriging, critical centers of endemism (cells with kriged WE values
   above the 90th percentile).
@@ -87,9 +87,10 @@ contains project metadata (authors, date, dependencies, etc.)
 main R script to run the entire project
 
 - [`R/`](https://github.com/ggrittz/Endemism/tree/master/R):
-contains R functions developed especially for this project: weighted
-endemism (`99_WE.R`), its null model (`99_WE_null_test.R`) and the
-species accumulation per cell used before kriging (`internals.R`)
+contains the R functions used by the scripts: weighted endemism
+(`99_WE.R`) and its null model (`99_WE_null_test.R`), slightly modified from
+Guerin et al. (2015), and the species accumulation per cell used before
+kriging (`internals.R`)
 
 - [`analyses/`](https://github.com/ggrittz/Endemism/tree/master/analyses):
 numbered R scripts of the workflow (see [Usage](#usage)); `00_*` download
@@ -134,7 +135,7 @@ and create a New Project from Version Control.
 - plantR (GitHub version, commit `b312b7a`): `remotes::install_github("LimaRAF/plantR@b312b7a")`
 - plantRdata 0.0.11 and rWCVPdata 0.8.0
 - Other packages (installed from `DESCRIPTION` by `make.R`): terra, sf,
-  gstat, automap, iNEXT, ConR, data.table, dplyr, tidyr, arrow, ggplot2,
+  gstat, automap, ConR, data.table, dplyr, tidyr, arrow, ggplot2,
   cowplot, ggspatial, MetroBrewer, nls.multstart, propagate, countrycode,
   readxl, writexl, googlesheets4, here
 - A bash shell with `awk` (used to split the GBIF download by family)
@@ -178,7 +179,7 @@ authentication with access to the sheet).
 | `04_crossing_maps.R` | Cross administrative units (GADM) with biomes | `maps/latamMap_classified.gpkg` |
 | `05_endemism_levels.R` | Validate records (checkDist, outliers) and assign biome endemism levels | `Endemic_species/` (emptied at start) |
 | `06_calculate_wee.R` | Weighted endemism at 0.5° and null model | `rds/we_map_area_*`, `rds/final_df.rds` |
-| `07_rarefy_interpolate_new.R` | Rarefaction (iNEXT) and ordinary kriging of WE and richness | `maps/interpolated_maps_*50km.tiff` |
+| `07_rarefy_interpolate_new.R` | Sampling completeness per cell (species accumulation curves) and ordinary kriging of WE and richness | `maps/interpolated_maps_*50km.tiff` |
 | `08_preparing_plots.R` | Figures 1-3, S3-S6, WE vs effort, critical centers of endemism | `figures/`, `outputs/tables/` |
 | `09_preparing_extra_records.R` | Records outside the spatial dataset that can enter the checklist by administrative unit | `rds/supp_data_for_endemics.rds` |
 | `10_preparing_checklist.R` | Checklists of richness and endemism per biome, Figure S1 | `outputs/tables/checklist_*`, `endemics_by_nt.xlsx` |
@@ -229,6 +230,9 @@ SynTreeSys members who classified the ecoregions into biomes.
 
 ## References
 
+- Guerin GR, Ruokolainen L, Lowe AJ (2015) A georeferenced implementation of
+  weighted endemism. *Methods in Ecology and Evolution* 6:845-852.
+  https://doi.org/10.1111/2041-210X.12361
 - Dinerstein E et al. (2017) An ecoregion-based approach to protecting half
   the terrestrial realm. *BioScience* 67:534-545.
 - Keith DA et al. (2022) A function-based typology for Earth's ecosystems.
