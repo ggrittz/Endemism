@@ -308,6 +308,7 @@ we_map_area <- readRDS(here::here("data", "derived-data", "rds", "we_map_area_50
 we_map_area_biomes <- readRDS(here::here("data", "derived-data", "rds", "we_map_area_biomes_50km.rds"))
 
 # Tropical America as a whole
+set.seed(2026)
 we_null_test <- endemism.null.test(we_map_area, nrep = 999)
 # Each biome separately
 we_null_test_biomes <- lapply(we_map_area_biomes, function(x) {
