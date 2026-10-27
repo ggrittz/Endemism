@@ -454,14 +454,8 @@ missing_spp <- sort(setdiff(final_df_all$scientificName,
 missing_spp_df <- final_df_all[final_df_all$scientificName %in% missing_spp, ]
 
 # Load data from Flora do Brasil and see if we can assign a ecoregion/biome
-file_path <- file.path("G:", "Outros computadores", "Meu laptop (1)",
-                       "Doutorado", "SynTreeSys", "Taxonomy", "data", "raw-data")
-
-# FURB
-# file_path <- file.path("G:", "Outros computadores", "Meu laptop", 
-#                        "SynTreeSys", "Taxonomy", "data", "raw-data")
-file_name <- "trees_and_shrubs_flora_do_brasil.rds"
-fbo <- readRDS(file.path(file_path, file_name))
+fbo <- readRDS(file.path("..", "Taxonomy", "data", "raw-data",
+                         "trees_and_shrubs_flora_do_brasil.rds"))
 fbo$scientificName <- paste(fbo$taxonName, fbo$taxonAuthorship)
 
 # Merge FBO vegetationType info with the missing_spp_df

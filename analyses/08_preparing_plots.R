@@ -9,7 +9,6 @@ file_path3 <- here::here("outputs", "tables")
 file_path4 <- here::here("data", 'raw-data', "maps")
 file1 <- "end_per_efg.rds"
 file2 <- "spp_per_efg.rds"
-file3 <- "we_map_area_50km.tiff"
 # Substitute here later for 1 km map
 file4 <- "interpolated_maps_50km.tiff"
 file44 <- "_biomes_"
@@ -22,7 +21,11 @@ file10 <- "hotspots_2016_1.shp"
 
 end_efg <- readRDS(file.path(file_path1, file1))
 spp_efg <- readRDS(file.path(file_path1, file2))
-wee_map <- terra::rast(file.path(file_path2, file3)) 
+# 0.5 degree grid of the WE map (06), used to rasterize the records (Figure S3)
+we_map_area <- readRDS(file.path(file_path1, "we_map_area_50km.rds"))
+wee_map <- terra::rast(we_map_area$WE_raster, crs = "epsg:4326")
+terra::values(wee_map) <- raster::values(we_map_area$WE_raster)
+rm(we_map_area)
 int_map <- terra::rast(file.path(file_path2, file4))
 # biomes...
 all_files <- list.files(file_path2, full.names = TRUE)
@@ -98,63 +101,7 @@ hotspots <- hotspots[hotspots$Type %in% "hotspot area", ]
 hotspots <- terra::crop(hotspots, tropical_america_diss)
 hotspots <- terra::mask(hotspots, tropical_america_diss)
 
-# WDPA for tropical America
-# Considering only classes I and II from IUCN and only terrestrial PAs
-# options(timeout = 10000)
-# getOption('timeout')
-# download.file(url = "https://d1gam3xoknrgr2.cloudfront.net/current/WDPA_Feb2026_Public_shp.zip",
-#               destfile = here::here("data", "raw-data", "WDPA_Feb_2026.zip"))
-# zip_name <- here::here("data", "raw-data", "WDPA_Feb_2026.zip")
-# unzip(zipfile = zip_name, exdir = here::here("data", "raw-data", "WDPA_Feb_2026"))
-# Nested zipfiles...
-# zip_files <- list.files(path = here::here("data", "raw-data", "WDPA_Feb_2026"),
-#                         pattern = ".zip",
-#                         full.names = TRUE)
-# 
-# for (i in seq_along(zip_files)) {
-#   folder_name <- paste0("WDPA_Feb_2026_shapefiles", "_", i - 1)
-#   output_path <- file.path(here::here("data", "raw-data"), folder_name)
-#   if (!dir.exists(output_path)) {
-#     dir.create(output_path, recursive = TRUE)
-#   }
-#   unzip(zip_files[i], exdir = output_path)
-# }
-
-# Load the polygons, prepare and save to derived-data/maps
-# zip_folders <- list.files(here::here("data", "raw-data"), 
-#                           pattern = "_shapefiles_",
-#                           full.names = TRUE)
-# 
-# all_polygons <- list()
-# 
-# for(i in seq_along(zip_folders)){
-#   wdpa_polygons <- sf::st_read(file.path(zip_folders[i], 
-#                                          "WDPA_Feb2026_Public_shp-polygons.shp"))
-#   
-#   # Only IUCN_CAT Ia, Ib, and II
-#   wdpa_polygons <- wdpa_polygons[wdpa_polygons$IUCN_CAT %in% c("Ia", "Ib", "II", "III"), ]
-#   # Only terrestrial PAs
-#   wdpa_polygons <- wdpa_polygons[wdpa_polygons$REALM %in% "Terrestrial", ]
-#   # Only designated or already established
-#   wdpa_polygons <- wdpa_polygons[wdpa_polygons$STATUS %in% c("Designated", "Established"), ]
-#   # Convert to terra and save
-#   wdpa_polygons_terra <- terra::vect(wdpa_polygons)
-#   # Crop and mask the PAs into tropical America
-#   wdpa_polygons_terra_final <- terra::crop(wdpa_polygons_terra, terra::ext(tropical_america_diss))
-#   wdpa_polygons_terra_final <- terra::buffer(wdpa_polygons_terra_final, 0)
-#   wdpa_polygons_terra_final <- terra::intersect(wdpa_polygons_terra_final, 
-#                                                 tropical_america_diss)
-#   
-#   # Save
-# all_polygons[[i]] <- wdpa_polygons_terra_final
-#     
-# }
-# 
-# all_polygons1 <- terra::vect(all_polygons)
-# # Save this in derived-data
-# pa_path <- here::here("data", "derived-data", "maps")
-# pa_name <- "tropicalAmerica_WDPA_Feb2026_cleaned.shp"
-# terra::writeVector(all_polygons1, file.path(pa_path, pa_name), overwrite = TRUE)
+# WDPA for tropical America: prepared by 00_prepare_wdpa.R
 
 # Whole
 america <- terra::aggregate(america, cores = 8)
@@ -263,7 +210,7 @@ th_s.obs_bin_dis <- th_s.obs_bin_dis[th_s.obs_bin_dis$area_km2 > 50, ]
 # terra::plot(th_s.obs_bin_dis, lwd = 3, add = T)
 
 # Observed Simpson
-# Commented out: 09_rarefy_interpolate_new no longer produces krig.simp.obs
+# Commented out: 07_rarefy_interpolate.R no longer produces krig.simp.obs
 # th_simp.obs <- terra::global(int_map$krig.simp.obs, fun = quantile, probs = 0.90, na.rm = TRUE)[1,1]
 # th_simp.obs_bin <- int_map$krig.simp.obs > th_simp.obs
 # th_simp.obs_bin <- terra::as.polygons(th_simp.obs_bin, dissolve = TRUE)
