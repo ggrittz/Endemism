@@ -387,17 +387,16 @@ latamMap <- terra::as.data.frame(latamMap, geom = "WKT")
 # to efg area? (and percentage)
 get_these <- !grepl("predominant|\\|", latamMap$our_efg_new)
 
-# 2. For each row:
+# Units entirely inside one biome have no shares (NA): set them to 1 and the unit area.
+# Units >= 90% keep their real shares, so all biome shares of a unit sum to 1.
 for(i in which(get_these)) {
   efg_name <- latamMap$our_efg_new[i]
   percentage_col <- paste0(efg_name, "_efgPercentage")
   area_col <- paste0(efg_name, "_efgArea_km2")
 
-  if(percentage_col %in% names(latamMap)) {
-    latamMap[i, percentage_col] <- 1  # Set percentage to 1 (pure efg)
-  }
-  if(area_col %in% names(latamMap)) {
-    latamMap[i, area_col] <- latamMap$gaz_efgArea_km2[i]  # Copy area value
+  if(percentage_col %in% names(latamMap) && is.na(latamMap[i, percentage_col])) {
+    latamMap[i, percentage_col] <- 1
+    latamMap[i, area_col] <- latamMap$gaz_efgArea_km2[i]
   }
 }
 

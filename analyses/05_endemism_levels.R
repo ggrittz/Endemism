@@ -291,7 +291,12 @@ for(i in family_names){
   which_na <- which(is.na(family_data$is_nt))
   gaz_lookup <- setNames(gaz_nt$is_nt, gaz_nt$loc.correc)
   family_data$is_nt[which_na] <- gaz_lookup[family_data$loc.correct1[which_na]]
-  
+  # Still NA (loc.correct1 not in the gazetteer): use the country's realm, as in 09
+  # (mixed countries such as Mexico or Argentina and countries outside Latin America are FALSE)
+  which_na <- which(is.na(family_data$is_nt))
+  family_data$is_nt[which_na] <- latam_gaz$Morrone_re_new[
+    match(sub("_.*", "", family_data$loc.correct1[which_na]), latam_gaz$loc_gaz)] %in% "Neotropical"
+
   # Remove non-Neotropical endemic species
   tab <- table(family_data$scientificName, family_data$is_nt, useNA = 'ifany')
   percent_true <- tab[, "TRUE"] / rowSums(tab, na.rm = FALSE) * 100

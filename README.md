@@ -95,9 +95,9 @@ This repository is structured as follow:
 
   - `numbers/`: values reported in the paper, one csv per script
   - `tables/`: summary tables and checklists (.xlsx)
-  - `PNAS_manuscript/`: submission files (Figures 1-3 and S1-S6 as PDF,
+  - `PNAS_manuscript/`: submission files (Figures 1-3 and S1-S7 as PDF,
     Datasets S1-S6, `references.bib`)
-  - `PNAS_manuscript/zenodo/`: the data deposit (`01_maps`,
+  - `zenodo/`: the data deposit built by `analyses/13_zenodo_export.R` (`01_maps`,
     `02_records`, `03_datasets`, `README.txt`), archived on Zenodo (DOI:
     **\[add later\]**)
 
@@ -201,7 +201,7 @@ and `data/raw-data/REFLORA/` (zip per herbarium plus the merged file).
 | `05_endemism_levels.R` | Flag spatial outliers (robust Mahalanobis distance combined with `checkDist`) and assign biome endemism levels | `Endemic_species/` (emptied at start) |
 | `06_calculate_wee.R` | Weighted endemism at 0.5° and null model | `rds/we_map_area_*`, `rds/final_df.rds` |
 | `07_rarefy_interpolate.R` | Sampling completeness per cell (species accumulation curves) and ordinary kriging of WE and richness | `maps/interpolated_maps_*50km.tiff` |
-| `08_preparing_plots.R` | Figures 1-3, S3-S6, WE vs effort, critical centers of endemism | `figures/`, `outputs/tables/` |
+| `08_preparing_plots.R` | Figures 1-3, S3-S7, WE vs effort, critical centers of endemism | `figures/`, `outputs/tables/` |
 | `09_preparing_extra_records.R` | Records outside the spatial dataset that can enter the checklist by administrative unit | `rds/supp_data_for_endemics.rds` |
 | `10_preparing_checklist.R` | Checklists of richness and endemism per biome, Figure S1 | `outputs/tables/checklist_*`, `endemics_by_nt.xlsx` |
 | `11_species_accumulation.R` | Description curve of tropical American endemics, Figure S2 | `figures/FigureS2.*` |

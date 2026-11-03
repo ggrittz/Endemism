@@ -11,12 +11,12 @@ The candidate models were: linear, exponential, quadratic, general_logistic, sat
 The non-linear Generalized Ricker model (i.e. species ~ b * (years/a * exp(1 - years/a))^alpha), was the one that by far presented the best fit to the species accumulation curve.
 
 general_ricker dAIC: 0
-quadratic dAIC: 305.49
-general_logistic dAIC: 392.51
-ricker dAIC: 577.66
-linear dAIC: 832.14
-exponential dAIC: 974.24
-saturating dAIC: 1888.91
+quadratic dAIC: 301.99
+general_logistic dAIC: 390.38
+ricker dAIC: 576.1
+linear dAIC: 838.53
+exponential dAIC: 973.35
+saturating dAIC: 1890.9
 general_ricker df: 4
 quadratic df: 4
 general_logistic df: 4
@@ -32,5 +32,5 @@ Using the function predictNLS() of the package propagate (Spiess, A. (2025). pro
 
 The earliest species in our study area were described in 1753. The rate of species described each year increased until the early 20s of the last century, when the rate started to decrease. 
 
-However, we estimated that there still are 17282 tree species to be discovered in tropical America, a feat that will result in a total of 42819 tree species [95% CI: 40103-46160] and that will not be achieved before the year of 2330 [95% CI: 2294-2373], given the historical rate of species discovery.
+However, we estimated that there still are 18189 tree species to be discovered in tropical America, a feat that will result in a total of 44149 tree species [95% CI: 41286-47680] and that will not be achieved before the year of 2337 [95% CI: 2300-2381], given the historical rate of species discovery.
 

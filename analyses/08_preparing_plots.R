@@ -233,7 +233,7 @@ th_s.obs_bin_dis <- th_s.obs_bin_dis[th_s.obs_bin_dis$area_km2 > 50, ]
 
 
 
-# New figures: Figure 2, Figure S4, Figure S3, Figure S6 -----------------
+# New figures: Figure 2, Figure S3, Figure S4, Figure S5, Figure S7 -----------------
 
 ##### Figure 2 #####
 # krig.we is already back in WE units (09); the legend only shows low/high
@@ -277,7 +277,7 @@ ggplot2::ggsave(here::here("figures", "Figure2.svg"), p_we, width = fig_w, heigh
 ggplot2::ggsave(here::here("figures", "Figure2.pdf"), p_we, width = fig_w, height = fig_h_map)
 ggplot2::ggsave(here::here("figures", "Figure2.png"), p_we, width = fig_w, height = fig_h_map, dpi = 300)
 
-##### Figure S4 #####
+##### Figure S5 #####
 # krig.s.obs is already back in number of species (09)
 p_rich <- ggplot2::ggplot() +
   ggplot2::geom_tile(data = int_map_df[!is.na(int_map_df$krig.s.obs), ],
@@ -287,10 +287,10 @@ p_rich <- ggplot2::ggplot() +
   ggplot2::guides(fill = ggplot2::guide_colourbar(barheight = ggplot2::unit(12, "lines"))) +
   ggplot2::labs(title = "Endemic species richness") +
   theme_sts
-ggplot2::ggsave(here::here("figures", "FigureS4.svg"), p_rich, width = fig_w, height = fig_h_map)
-ggplot2::ggsave(here::here("figures", "FigureS4.png"), p_rich, width = fig_w, height = fig_h_map, dpi = 300)
+ggplot2::ggsave(here::here("figures", "FigureS5.svg"), p_rich, width = fig_w, height = fig_h_map)
+ggplot2::ggsave(here::here("figures", "FigureS5.png"), p_rich, width = fig_w, height = fig_h_map, dpi = 300)
 # PDF (vector) for PNAS
-ggplot2::ggsave(here::here("figures", "FigureS4.pdf"), p_rich, width = fig_w, height = fig_h_map)
+ggplot2::ggsave(here::here("figures", "FigureS5.pdf"), p_rich, width = fig_w, height = fig_h_map)
 
 ##### Figure S3 #####
 dens_df <- terra::as.data.frame(terra::project(dens, proj_m, res = 50000, method = "near"), xy = TRUE)
@@ -306,7 +306,114 @@ ggplot2::ggsave(here::here("figures", "FigureS3.png"), p_dens, width = fig_w, he
 # PDF (vector) for PNAS
 ggplot2::ggsave(here::here("figures", "FigureS3.pdf"), p_dens, width = fig_w, height = fig_h_map)
 
-##### Figure S6: WE null model #####
+##### Figure S4: top municipalities #####
+# (a) The ten most collected municipalities (Hans ter Steege's comment), numbered as in
+# top_collected_municipalities.xlsx; (b) and (c) zooms on overlapping ranks.
+# Records inside tropical America (same records as the density map); municipality = first
+# three levels of loc.correct1 (country_state_municipality). NAME_all in latamMap has four
+# levels in Brazil, Peru, Bolivia and Ecuador (districts), so map units are matched on their
+# first three levels and dissolved. Records resolved only to country or state are not counted.
+in_ta <- !is.na(terra::extract(dens, my_df1)[, 2])
+muni <- my_df$loc.correct1[in_ta]
+muni_xy <- terra::crds(my_df1)[in_ta, ]
+keep <- lengths(strsplit(muni, "_")) >= 3
+muni <- sub("^([^_]+_[^_]+_[^_]+).*$", "\\1", muni[keep])
+muni_xy <- muni_xy[keep, ]
+muni_n <- as.data.frame(table(NAME_all = muni), stringsAsFactors = FALSE)
+names(muni_n)[2] <- "n_records"
+# Ten most collected municipalities (Table S4)
+top_muni <- muni_n[order(muni_n$n_records, decreasing = TRUE)[1:10], ]
+top_muni$rank <- seq_len(nrow(top_muni))
+top_muni$pct_records <- 100 * top_muni$n_records / sum(in_ta)
+top_muni$Country <- tools::toTitleCase(sapply(strsplit(top_muni$NAME_all, "_"), `[`, 1))
+top_muni$State <- tools::toTitleCase(sapply(strsplit(top_muni$NAME_all, "_"), `[`, 2))
+top_muni$Municipality <- tools::toTitleCase(sapply(strsplit(top_muni$NAME_all, "_"), `[`, 3))
+writexl::write_xlsx(top_muni[, c("rank", "Municipality", "State", "Country", "n_records", "pct_records")],
+                    file.path(file_path3, "top_collected_municipalities.xlsx"))
+# Polygons of the ten municipalities (map units dissolved to three levels)
+latam_muni <- terra::vect(file.path(file_path2, "latamMap_classified.gpkg"))
+latam_muni$NAME_3lev <- sub("^([^_]+_[^_]+_[^_]+).*$", "\\1", latam_muni$NAME_all)
+latam_muni <- latam_muni[latam_muni$NAME_3lev %in% top_muni$NAME_all, "NAME_3lev"]
+latam_muni <- terra::aggregate(latam_muni, by = "NAME_3lev")
+latam_muni <- terra::simplifyGeom(terra::project(latam_muni, proj_m), tolerance = 1000)
+latam_muni <- sf::st_as_sf(latam_muni)
+# Label positions: point inside the polygon; median coordinates of the records if no polygon
+lab <- top_muni[, c("rank", "NAME_all")]
+lab_xy <- t(sapply(lab$NAME_all, function(m) apply(muni_xy[muni == m, , drop = FALSE], 2, median)))
+lab_xy <- terra::crds(terra::project(terra::vect(lab_xy, crs = "epsg:4326"), proj_m))
+in_map <- match(lab$NAME_all, latam_muni$NAME_3lev)
+lab_xy[!is.na(in_map), ] <- sf::st_coordinates(sf::st_point_on_surface(latam_muni[in_map[!is.na(in_map)], ]))
+lab$x <- lab_xy[, 1]
+lab$y <- lab_xy[, 2]
+
+# Zoom areas A (ranks 7-8) and B (ranks 9-10), which overlap in (a): square box around the
+# polygons and label points, padded by max(30 km, 25% of the larger side), at least 300 km wide
+# so the rectangle is visible on the full map
+zoom_ids <- list(c(7, 8), c(9, 10))
+zoom_box <- do.call(rbind, lapply(seq_along(zoom_ids), function(i) {
+  sel <- lab$rank %in% zoom_ids[[i]]
+  bb <- sf::st_bbox(latam_muni[latam_muni$NAME_3lev %in% lab$NAME_all[sel], ])
+  xr <- range(c(bb[c("xmin", "xmax")], lab$x[sel]), na.rm = TRUE)
+  yr <- range(c(bb[c("ymin", "ymax")], lab$y[sel]), na.rm = TRUE)
+  side <- max(diff(xr), diff(yr))
+  half <- max(side / 2 + max(3e4, 0.25 * side), 1.5e5)
+  data.frame(id = LETTERS[i], xmin = mean(xr) - half, xmax = mean(xr) + half,
+             ymin = mean(yr) - half, ymax = mean(yr) + half)
+}))
+p_muni <- ggplot2::ggplot() +
+  ggplot2::geom_sf(data = latam_muni, fill = "#b2182b", colour = NA) +
+  ggplot2::geom_point(data = lab, ggplot2::aes(x, y), shape = 21, size = 6,
+                      stroke = 1, colour = "black", fill = NA) +
+  # Ranks inside the zoom boxes are numbered in (b) and (c) only
+  ggplot2::geom_text(data = lab[!lab$rank %in% unlist(zoom_ids), ], ggplot2::aes(x, y, label = rank),
+                     nudge_x = 1.8e5, size = 5, fontface = "bold") +
+  ggplot2::geom_rect(data = zoom_box, ggplot2::aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+                     fill = NA, colour = "black", linewidth = 0.4) +
+  ggplot2::geom_text(data = zoom_box, ggplot2::aes(xmin, ymax, label = id),
+                     hjust = 1.2, vjust = -0.2, size = 5, fontface = "bold") +
+  map_sts +
+  ggplot2::labs(title = "(a) Ten most collected municipalities") +
+  theme_sts
+# Insets (b) and (c): same layers as (a), limited to the zoom boxes
+p_zoom <- lapply(seq_len(nrow(zoom_box)), function(i) {
+  ggplot2::ggplot() +
+    map_sts[[1]] +
+    ggplot2::geom_sf(data = latam_muni, fill = "#b2182b", colour = NA) +
+    ggplot2::geom_point(data = lab, ggplot2::aes(x, y), shape = 21, size = 6,
+                        stroke = 1, colour = "black", fill = NA) +
+    ggplot2::geom_text(data = lab, ggplot2::aes(x, y, label = rank),
+                       nudge_x = 0.1 * (zoom_box$xmax[i] - zoom_box$xmin[i]), size = 5, fontface = "bold") +
+    ggspatial::annotation_scale(location = "br", width_hint = 0.3, text_cex = 0.7, style = "bar",
+                                height = ggplot2::unit(0.15, "cm"), pad_y = ggplot2::unit(0.3, "cm")) +
+    ggplot2::coord_sf(crs = proj_m, xlim = c(zoom_box$xmin[i], zoom_box$xmax[i]),
+                      ylim = c(zoom_box$ymin[i], zoom_box$ymax[i]), expand = FALSE) +
+    ggplot2::labs(title = paste0("(", letters[1 + i], ") Zoom ", zoom_box$id[i], ": ranks ",
+                                 paste(zoom_ids[[i]], collapse = " and "))) +
+    theme_sts +
+    ggplot2::theme(axis.text = ggplot2::element_blank(), axis.ticks = ggplot2::element_blank(),
+                   axis.title = ggplot2::element_blank(), plot.title = ggplot2::element_text(size = 13))
+})
+# Legend of the ten municipalities
+leg_txt <- paste0(top_muni$rank, ". ", top_muni$Municipality, ", ", top_muni$State, " (", top_muni$Country,
+                  ") - N = ", format(top_muni$n_records, big.mark = ",", trim = TRUE))
+p_leg <- ggplot2::ggplot() +
+  ggplot2::annotate("text", x = 0, y = rev(seq_along(leg_txt)), label = leg_txt, hjust = 0, size = 4) +
+  ggplot2::scale_x_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  ggplot2::scale_y_continuous(limits = c(0.5, length(leg_txt) + 0.5)) +
+  ggplot2::coord_cartesian(clip = "off") +
+  ggplot2::labs(title = "Municipalities") +
+  ggplot2::theme_void(base_size = 15) +
+  ggplot2::theme(plot.title = ggplot2::element_text(face = "bold"))
+p_top <- patchwork::wrap_plots(p_muni, patchwork::wrap_plots(p_zoom[[1]], p_zoom[[2]], p_leg, ncol = 1),
+                               ncol = 2, widths = c(1, 0.8))
+ggplot2::ggsave(here::here("figures", "FigureS4.svg"), p_top, width = 1.8 * fig_w, height = fig_h_map)
+ggplot2::ggsave(here::here("figures", "FigureS4.png"), p_top, width = 1.8 * fig_w, height = fig_h_map,
+                dpi = 300)
+# PDF (vector) for PNAS
+ggplot2::ggsave(here::here("figures", "FigureS4.pdf"), p_top, width = 1.8 * fig_w, height = fig_h_map)
+
+
+##### Figure S7: WE null model #####
 # (a) observed WE minus the null median, in units of the null interquartile
 # range (squished at +-3); (b) one-sided test, P <= 0.025 higher and
 # P >= 0.975 lower than expected; (c) outliers beyond 1.5 x IQR of the null.
@@ -345,10 +452,10 @@ p_null <- cowplot::plot_grid(
   p_null_c + ggplot2::theme(legend.position = "none"),
   cowplot::plot_grid(cowplot::get_legend(p_null_a), cowplot::get_legend(p_null_b), ncol = 1),
   ncol = 2)
-ggplot2::ggsave(here::here("figures", "FigureS6.svg"), p_null, width = fig_w, height = fig_h_map, bg = "white")
-ggplot2::ggsave(here::here("figures", "FigureS6.png"), p_null, width = fig_w, height = fig_h_map, dpi = 300, bg = "white")
+ggplot2::ggsave(here::here("figures", "FigureS7.svg"), p_null, width = fig_w, height = fig_h_map, bg = "white")
+ggplot2::ggsave(here::here("figures", "FigureS7.png"), p_null, width = fig_w, height = fig_h_map, dpi = 300, bg = "white")
 # PDF (vector) for PNAS
-ggplot2::ggsave(here::here("figures", "FigureS6.pdf"), p_null, width = fig_w, height = fig_h_map, bg = "white")
+ggplot2::ggsave(here::here("figures", "FigureS7.pdf"), p_null, width = fig_w, height = fig_h_map, bg = "white")
 
 # WE vs sampling effort (numbers for the CCE text, Moabe's comment) -------
 we_eff <- terra::as.data.frame(int_map[[c("we", "N", "krig.we", "we_null_out_above_below")]],
@@ -371,6 +478,46 @@ we_vs_effort <- data.frame(
             100 * mean(we_eff$we_null_out_above_below %in% 1)))
 writexl::write_xlsx(we_vs_effort, here::here("outputs", "tables", "we_vs_effort.xlsx"))
 rm(we_eff)
+
+# WE vs species richness (Hans ter Steege's comment) ----------------------
+# Herbarium records only: same records (no realm transitional/predominant)
+# and same 50 km cells as the WE map. No plot data.
+occ <- readRDS(here::here("data", "derived-data", "rds", "final_df.rds"))
+occ <- occ[occ$is_realm_predominant %in% FALSE & occ$is_realm_transitional %in% FALSE, ]
+occ$cell <- terra::cellFromXY(int_map, cbind(as.numeric(occ$decimalLongitude.new1),
+                                              as.numeric(occ$decimalLatitude.new1)))
+occ <- occ[!is.na(occ$cell), c("cell", "scientificName")]
+# Observed and rarefied richness per cell (Hurlbert 1971; n = 20 records, as base.n in 07)
+we_rich <- do.call(rbind, lapply(split(occ$scientificName, occ$cell), function(sp) {
+  ni <- as.vector(table(sp))
+  data.frame(N_rec = sum(ni),
+             S_obs = length(ni),
+             S_rare = if (sum(ni) >= 20) sum(1 - exp(lchoose(sum(ni) - ni, 20) - lchoose(sum(ni), 20))) else NA_real_)
+}))
+we_rich$cell <- as.numeric(rownames(we_rich))
+we_rich <- cbind(we_rich, terra::extract(int_map[["we"]], we_rich$cell))
+we_rich <- we_rich[!is.na(we_rich$we), ]
+# Corrected weighted endemism (WE / S): endemism not explained by richness alone
+we_rich$cwe <- we_rich$we / we_rich$S_obs
+# Hotspot overlap over all interpolated cells (top 10%, same threshold as the CCE)
+krig <- terra::as.data.frame(int_map[[c("krig.we", "krig.s.obs")]], na.rm = TRUE)
+krig$top_we <- krig$krig.we >= stats::quantile(krig$krig.we, 0.9)
+krig$top_s <- krig$krig.s.obs >= stats::quantile(krig$krig.s.obs, 0.9)
+we_vs_richness <- data.frame(
+  metric = c("n_cells_raw", "n_cells_rarefied",
+             "rho_rawWE_Sobs", "rho_rawWE_Srare20", "rho_krigWE_krigSobs",
+             "rho_CWE_Srare20", "rho_Srare20_Nrec", "rho_Sobs_Nrec",
+             "pct_CCE_in_top10_krigS"),
+  value = c(nrow(we_rich), sum(!is.na(we_rich$S_rare)),
+            stats::cor(we_rich$we, we_rich$S_obs, method = "spearman"),
+            stats::cor(we_rich$we, we_rich$S_rare, method = "spearman", use = "complete.obs"),
+            stats::cor(krig$krig.we, krig$krig.s.obs, method = "spearman"),
+            stats::cor(we_rich$cwe, we_rich$S_rare, method = "spearman", use = "complete.obs"),
+            stats::cor(we_rich$S_rare, we_rich$N_rec, method = "spearman", use = "complete.obs"),
+            stats::cor(we_rich$S_obs, we_rich$N_rec, method = "spearman"),
+            100 * mean(krig$top_s[krig$top_we])))
+writexl::write_xlsx(we_vs_richness, here::here("outputs", "tables", "we_vs_richness.xlsx"))
+rm(occ, we_rich, krig)
 
 # CCE in the Cerrado and the Caatinga (numbers for Kyle's comment) --------
 ecoreg <- terra::vect(file.path(file_path2, "NTAmericas_ecoregions.shp"))
@@ -399,94 +546,6 @@ cce_eco <- do.call(rbind, lapply(names(eco_biome), function(eco) {
 }))
 writexl::write_xlsx(cce_eco, here::here("outputs", "tables", "cce_cerrado_caatinga.xlsx"))
 rm(ecoreg, eco_biome)
-
-##### Old figure code #####
-
-# my_lay <- matrix(c(1, 2, 3, 5, 1, 2, 3, 5, 4, 4, 4, 4),
-#                  nrow = 3, ncol = 4, byrow = TRUE)
-# 
-# {
-# svg("figures/Figure22.svg", width = 32.5, height = 16)
-# 
-# layout(my_lay, 
-#        widths = c(0.05, 0.4375, 0.4375, 0.05),
-#        heights = c(0.475, 0.475, 0.045))
-# layout.show(5)
-# 
-# # Shared y-axis name
-# par(mar = c(0, 0, 0, 0))
-# plot(1, type = "n", axes = FALSE, xlab = "", ylab = "")
-# mtext("Latitude", side = 4, line = -8, cex = 4.5)
-# 
-# # Sampling effort
-# par(mar = c(0, 0, 0, 0))
-# terra::plot(log(dens),
-#             main = "(a) Sampling effort",
-#             col = hcl.colors(n = 100, "RdYlBu", rev = T),
-#             cex.main = 6,
-#             pax = list(cex.axis = 5, las = 1, mgp = c(3, 2.5, 0)),
-#             legend = F,
-#             axes = T)
-# terra::plot(america, add = TRUE)
-# 
-# # # Simpson diversity
-# # par(mar = c(0, 0, 0, 0))
-# # terra::plot(int_map$krig.simp.obs,
-# #             main = "(c) Simpson diversity",
-# #             cex.main = 6,
-# #             pax = list(cex.axis = 5, las = 1, mgp = c(3, 2.5, 0)),
-# #             col = hcl.colors(n = 100, "RdYlBu", rev = T),
-# #             legend = F,
-# #             axes = T)
-# # terra::plot(th_simp.obs_bin_dis, lwd = 5, add = T)
-# # terra::plot(america, add = TRUE)
-# 
-# # Weighted endemism
-# par(mar = c(0, 0, 0, 0))
-# terra::plot(int_map$krig.we, 
-#             main = "(b) Weighted endemism",
-#             cex.main = 6,
-#             pax = list(cex.axis = 5, las = 1, yaxt = "n", mgp = c(3, 2.5, 0)),
-#             col = hcl.colors(n = 100, "RdYlBu", rev = T), 
-#             legend = F,
-#             axes = T)
-# # Only above 50 km² to ease visualization
-# terra::plot(th_we_bin_dis[th_we_bin_dis$area_km2 > 50, ], lwd = 5, add = T)
-# terra::plot(america, add = TRUE)
-# # box()
-# 
-# # Shared x-axis
-# par(mar = c(0, 0, 0, 0))
-# plot(1, type = "n", axes = FALSE, xlab = "", ylab = "")
-# mtext("Longitude", side = 3, line = -4, cex = 4.5)
-# 
-# # Legend bar
-# par(mar = c(0, 0, 0, 5))
-# plot(1, type = "n", xlim = c(0, 1), ylim = c(0, 100), axes = FALSE, xlab = "", ylab = "")
-# colramp <- hcl.colors(n = 100, "RdYlBu", rev = T)
-# rect(0.2, 0:99, 0.8, 1:100, col = colramp, border = NA)
-# axis(2, at = c(0, 100), labels = c("Low", "High"), las = 1, cex.axis = 4.5, line = -0.5)
-# # text(0.5, -5, "Value", xpd = TRUE, cex = 1.2)
-# dev.off()
-# }
-# 
-# # # Disentangled values: how much did we separate the effects of sampling bias
-# # # and richness from endemism?
-# # # Mask on the density layer
-# # rich_obs <- terra::resample(int_map$krig.s.obs, dens, method = "bilinear")
-# # simp_obs <- terra::resample(int_map$krig.simp.obs, dens, method = "bilinear")
-# # ende_obs <- terra::resample(int_map$krig.we, dens, method = "bilinear")
-# # 
-# # # Only not NA and NaN
-# # # also back to the original value
-# # df <- data.frame(rich = exp(terra::values(rich_obs)),
-# #                  simp = exp(terra::values(simp_obs)),
-# #                  ende = exp(terra::values(ende_obs)),
-# #                  dens = terra::values(dens))
-# # df <- na.omit(df)
-# # cor(df$krig.s.obs, df$sum)
-# # cor(df$krig.we, df$sum)
-# # cor(df$krig.simp.obs, df$sum)
 
 
 # Top 90% WE values inside each biome (area) ------------------------------
@@ -539,7 +598,7 @@ ggplot2::ggsave(here::here("figures", "Figure3.svg"), p_fig3, width = fig_w, hei
 ggplot2::ggsave(here::here("figures", "Figure3.pdf"), p_fig3, width = fig_w, height = fig_h_map, bg = "white")
 ggplot2::ggsave(here::here("figures", "Figure3.png"), p_fig3, width = fig_w, height = fig_h_map, dpi = 300, bg = "white")
 
-# Figure S5: richness of endemics inside each interpolated biome ----------
+# Figure S6: richness of endemics inside each interpolated biome ----------
 # Each panel has its own colour scale (low/high within the biome)
 p_rich_biomes <- lapply(seq_along(biome_names), function(i) {
   r <- int_map_biomes[[biome_names[i]]][["krig.s.obs"]]
@@ -555,15 +614,15 @@ p_rich_biomes <- lapply(seq_along(biome_names), function(i) {
     ggplot2::labs(title = ttl) +
     theme_sts
 })
-p_figS5 <- cowplot::plot_grid(
+p_figS6 <- cowplot::plot_grid(
   cowplot::plot_grid(plotlist = lapply(p_rich_biomes, `+`, ggplot2::theme(legend.position = "none")),
                      ncol = 2),
   cowplot::get_legend(p_rich_biomes[[1]]),
   rel_widths = c(1, 0.15))
-ggplot2::ggsave(here::here("figures", "FigureS5.svg"), p_figS5, width = fig_w, height = fig_h_map, bg = "white")
-ggplot2::ggsave(here::here("figures", "FigureS5.png"), p_figS5, width = fig_w, height = fig_h_map, dpi = 300, bg = "white")
+ggplot2::ggsave(here::here("figures", "FigureS6.svg"), p_figS6, width = fig_w, height = fig_h_map, bg = "white")
+ggplot2::ggsave(here::here("figures", "FigureS6.png"), p_figS6, width = fig_w, height = fig_h_map, dpi = 300, bg = "white")
 # PDF (vector) for PNAS
-ggplot2::ggsave(here::here("figures", "FigureS5.pdf"), p_figS5, width = fig_w, height = fig_h_map, bg = "white")
+ggplot2::ggsave(here::here("figures", "FigureS6.pdf"), p_figS6, width = fig_w, height = fig_h_map, bg = "white")
 
 
 
@@ -699,60 +758,5 @@ utils::write.csv(data.frame(key = c(we_vs_effort$metric,
                  here::here("outputs", "numbers", "09_preparing_plots.csv"), row.names = FALSE)
 rm(hot_cov)
 
-
-# ##### EFG SUMMARY SCATTERPLOT #####
-# library(ggplot2)
-# library(ggpmisc)
-# new_row <- data.frame(X = NA, 
-#                       EFG = "Oceanic cool temperate rainforests",
-#                       Richness = NA,
-#                       Endemics = NA,
-#                       Endemism_level = NA,
-#                       EFG_area_km = NA)
-# # Just to fix colors...
-# scatt <- rbind(scatt, new_row)
-# scatt <- scatt[order(scatt$EFG), ]
-# cores <- MetroBrewer::metro.brewer("Beijing", n = 19)
-# names(cores) <- scatt$EFG
-# scatt$EFG <- factor(scatt$EFG, levels = names(cores))
-# scatt1 <- scatt[!is.na(scatt$Richness), ]
-# scatt1[is.na(scatt1)] <- 0
-# scatt2 <- scatt1[scatt1$Endemics > 0, ]
-# 
-# 
-# ggplot(scatt2, aes(x = Richness,
-#                    y = Endemics,
-#                    color = EFG)) +
-#   geom_point(aes(size = Endemism_level), alpha = 0.7) + 
-#   geom_smooth(method = "lm", 
-#               se = TRUE,
-#               color = "black",
-#               linewidth = 0.5,
-#               aes(group = 1),
-#               show.legend = FALSE) +
-#   ggpmisc::stat_poly_eq(formula = y ~ x,
-#                         aes(label = paste(after_stat(rr.label), 
-#                                           sep = "~~~")),
-#                         label.x = "right",
-#                         label.y = "top",
-#                         size = 4,
-#                         color = "black") +
-#   scale_x_log10() +
-#   scale_y_log10() +
-#   scale_size_continuous(range = c(3, 15)) +
-#   scale_color_manual(values = cores) +
-#   labs(x = "\nSpecies richness (log10)",
-#        y = "Endemic species (log10)\n",
-#        color = "Biome",
-#        size = "Endemism level (%)") +
-#   theme_minimal() +
-#   theme(legend.position = "right",
-#         axis.title = element_text(size = 15),
-#         axis.text = element_text(size = 13), 
-#         legend.title = element_text(size = 13),
-#         legend.text = element_text(size = 13))
-# 
-# ggsave("figures/FigureS2.svg", device = "svg",
-#        height = 7, width = 12)
 
 

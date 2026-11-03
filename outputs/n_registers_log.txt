@@ -1015,3 +1015,11 @@ ALL	11_richness_biome_spatial	1153187
 ALL	11_richness_biome_extra	92961
 ALL	11_endemism_biome_spatial	1153187
 ALL	11_endemism_biome_extra	41500
+ALL	11_extra_candidates	1224467
+ALL	11_spatial	1153187
+ALL	11_extra_ok_dist	931859
+ALL	11_checklist_all	2085046
+ALL	11_richness_biome_spatial	1153187
+ALL	11_richness_biome_extra	92961
+ALL	11_endemism_biome_spatial	1153187
+ALL	11_endemism_biome_extra	41500

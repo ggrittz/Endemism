@@ -184,6 +184,12 @@ bad_list <- plantR::checkDist(x = bad_list,
                               source = "wcvp")
 bad_list$loc.dist <- NULL
 
+# State not in the map (e.g. 'panama_kuna yala', 'panama_san blas islands'): use the
+# country's realm (mixed countries such as Mexico or Argentina are not 'Neotropical')
+no_state <- is.na(bad_list$Morrone_re_new)
+bad_list$Morrone_re_new[no_state] <- latam_class$Morrone_re_new[
+  match(sub("_.*", "", bad_list$loc.correct1[no_state]), latam_class$NAME_all)]
+
 # Finally, assign the location as Neotropical or not (is_nt) based on Morrone_re_new
 bad_list$is_nt <- bad_list$Morrone_re_new %in% "Neotropical"
 
@@ -197,4 +203,4 @@ saveRDS(bad_list, here::here("data", "derived-data", "rds", "supp_data_for_endem
 
 rm(file_path1, final_df, family_names, latam_class, our_names, latam_adm, loc_alias,
    vouchers, ffb_keys, exotics, bad_list, cols, i, rds_path, family_data_bad, occ_keys,
-   family_data_good, family_data_final, loc_state, fix_these, loc_country)
+   family_data_good, family_data_final, loc_state, fix_these, loc_country, no_state)
