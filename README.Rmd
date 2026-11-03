@@ -255,9 +255,7 @@ Contact: Guilherme S. Grittz (ggrittz@usp.br).
 ## Acknowledgments
 
 G.S.G. was funded by the São Paulo Research Foundation (FAPESP, grant
-2024/22166-2). We thank the herbaria and data portals (GBIF, JABOT,
-REFLORA, speciesLink) that make their collections available, and the
-SynTreeSys members who classified the ecoregions into biomes.
+2024/22166-2).
 
 
 

@@ -51,10 +51,10 @@ to final figures and tables, all results of the paper:
   collector standardisation; duplicate removal; `checkDist` against WCVP
   native ranges; robust Mahalanobis outliers).
 - **Biome assignment:** ecoregions converted into EFGs through a
-  classification table built by SynTreeSys members.
+  classification table built by the authors.
 - **Endemism:** endemism levels per biome, weighted endemism with a null
-  model, sampling completeness and kriging, critical centers of endemism (cells
-  with kriged WE values above the 90th percentile).
+  model, sampling completeness and kriging, critical centers of endemism
+  (cells with kriged WE values above the 90th percentile).
 - **Species discovery:** description curve of tropical American
   endemics.
 - **Reproducible numbers:** every script writes the values it reports to
@@ -71,10 +71,10 @@ This repository is structured as follow:
 - [`make.R`](https://github.com/ggrittz/Endemism/tree/master/make.R):
   main R script to run the entire project
 
-- [`R/`](https://github.com/ggrittz/Endemism/tree/master/R): contains the
-  R functions used by the scripts: weighted endemism (`99_WE.R`) and its
-  null model (`99_WE_null_test.R`), slightly modified from Guerin et al.
-  (2015), and the species accumulation per cell used before kriging
+- [`R/`](https://github.com/ggrittz/Endemism/tree/master/R): contains
+  the R functions used by the scripts: weighted endemism (`99_WE.R`) and
+  its null model (`99_WE_null_test.R`), slightly modified from Guerin et
+  al. (2015), and the species accumulation per cell used before kriging
   (`internals.R`)
 
 - [`analyses/`](https://github.com/ggrittz/Endemism/tree/master/analyses):
@@ -97,9 +97,9 @@ This repository is structured as follow:
   - `tables/`: summary tables and checklists (.xlsx)
   - `PNAS_manuscript/`: submission files (Figures 1-3 and S1-S7 as PDF,
     Datasets S1-S6, `references.bib`)
-  - `zenodo/`: the data deposit built by `analyses/13_zenodo_export.R` (`01_maps`,
-    `02_records`, `03_datasets`, `README.txt`), archived on Zenodo (DOI:
-    **\[add later\]**)
+  - `zenodo/`: the data deposit built by `analyses/13_zenodo_export.R`
+    (`01_maps`, `02_records`, `03_datasets`, `README.txt`), archived on
+    Zenodo (DOI: **\[add later\]**)
 
 - [`figures/`](https://github.com/ggrittz/Endemism/tree/master/figures):
   figures written by the scripts (svg, png and pdf)
@@ -123,9 +123,9 @@ To install this compendium:
   `remotes::install_github("LimaRAF/plantR@b312b7a")`
 - plantRdata 0.0.11 and rWCVPdata 0.8.0
 - Other packages (installed from `DESCRIPTION` by `make.R`): terra, sf,
-  raster, sp, gstat, automap, ConR, data.table, dplyr, tidyr, plyr, arrow,
-  ggplot2, cowplot, ggspatial, scales, propagate, countrycode, readxl,
-  writexl, googlesheets4, here
+  raster, sp, gstat, automap, ConR, data.table, dplyr, tidyr, plyr,
+  arrow, ggplot2, cowplot, ggspatial, scales, propagate, countrycode,
+  readxl, writexl, googlesheets4, here
 - simba, adehabitat and geosphere (required by `99_WE.R`); simba and
   adehabitat were archived on CRAN and are installed from the CRAN
   archive (`Remotes` in `DESCRIPTION`)
@@ -150,27 +150,29 @@ source("make.R")
 - Some analyses listed in the `make.R` might take time
 
 **Input data.** Raw downloads go to `data/raw-data/`: the GBIF download
-(DOI: https://doi.org/10.15468/DL.E39T7B; filtered by
+(DOI: <https://doi.org/10.15468/DL.E39T7B>; filtered by
 `analyses/99_bash_gbif_occurrence.sh`) in `GBIF/`, JABOT and REFLORA IPT
-downloads (`analyses/00_dl_jabot_data.R`, `analyses/00_dl_reflora_data.R`)
-in `JABOT/` and `REFLORA/`, speciesLink
-(`analyses/99_bash_specieslink_occurrence.sh`) in `speciesLink/`, and the
-maps listed in `analyses/03_prepare_TAmap.R`. The species list
-(`checklist_species_level.rds`, `spp_names.txt`) and the list of families
-(`family_names.rds`) are copied to `data/derived-data/` by the `make.R` of
-[SynTreeSys/Taxonomy](https://github.com/synTreeSys/Taxonomy), which must sit
-next to this repository (`../Taxonomy`, also read for the Flora e Funga do
-Brasil data). `make.R` downloads the ecoregion -> EFG table from Google
-Sheets (requires authentication with access to the sheet).
+downloads (`analyses/00_dl_jabot_data.R`,
+`analyses/00_dl_reflora_data.R`) in `JABOT/` and `REFLORA/`, speciesLink
+(`analyses/99_bash_specieslink_occurrence.sh`) in `speciesLink/`, and
+the maps listed in `analyses/03_prepare_TAmap.R`. The species list
+(`checklist_species_level.rds`, `spp_names.txt`) and the list of
+families (`family_names.rds`) are copied to `data/derived-data/` by the
+`make.R` of
+[SynTreeSys/Taxonomy](https://github.com/synTreeSys/Taxonomy), which
+must sit next to this repository (`../Taxonomy`, also read for the Flora
+e Funga do Brasil data). `make.R` downloads the ecoregion -\> EFG table
+from Google Sheets (requires authentication with access to the sheet).
 
-**Raw vs. filtered files.** The raw GBIF download (`occurrence.txt`, ~700 GB)
-and the raw speciesLink parts are too large to keep inside the project, so
-only their filtered versions live in `data/raw-data/`. The two bash scripts
-read the raw data from outside the project and write the filtered files
-into it:
+**Raw vs. filtered files.** The raw GBIF download (`occurrence.txt`,
+~700 GB) and the raw speciesLink parts are too large to keep inside the
+project, so only their filtered versions live in `data/raw-data/`. The
+two bash scripts read the raw data from outside the project and write
+the filtered files into it:
 
-- `analyses/99_bash_gbif_occurrence.sh` reads `occurrence.txt` from the path
-  in `OCCURRENCE_FILE` and writes `data/raw-data/GBIF/filtered_occurrence.txt`
+- `analyses/99_bash_gbif_occurrence.sh` reads `occurrence.txt` from the
+  path in `OCCURRENCE_FILE` and writes
+  `data/raw-data/GBIF/filtered_occurrence.txt`
 - `analyses/99_bash_specieslink_occurrence.sh` downloads the speciesLink
   parts to `TMP_DIR` (deleted after filtering) and writes
   `data/raw-data/speciesLink/speciesLink_occurrences.txt`, which the
@@ -178,7 +180,7 @@ into it:
   `speciesLink_occurrence_filtered.txt`
 
 Both paths can be changed when running the scripts from `analyses/` in a
-bash shell (e.g. MSYS2 on Windows), for example:
+bash shell (e.g. MSYS2 on Windows), for example:
 
 ``` bash
 OCCURRENCE_FILE=/path/to/occurrence.txt bash 99_bash_gbif_occurrence.sh
@@ -212,7 +214,8 @@ and `data/raw-data/REFLORA/` (zip per herbarium plus the merged file).
 is not part of the main run; it documents how the dry forest (T1.2)
 vs. thorny desert (T5.2) borderline was decided.
 
-Random steps use `set.seed(2026)` (null model in 06 and accumulation curves in 07).
+Random steps use `set.seed(2026)` (null model in 06 and accumulation
+curves in 07).
 
 ## Citation
 
@@ -238,15 +241,13 @@ Contact: Guilherme S. Grittz (<ggrittz@usp.br>).
 ## Acknowledgments
 
 G.S.G. was funded by the São Paulo Research Foundation (FAPESP, grant
-2024/22166-2). We thank the herbaria and data portals (GBIF, JABOT,
-REFLORA, speciesLink) that make their collections available, and the
-SynTreeSys members who classified the ecoregions into biomes.
+2024/22166-2).
 
 ## References
 
-- Guerin GR, Ruokolainen L, Lowe AJ (2015) A georeferenced implementation of
-  weighted endemism. *Methods in Ecology and Evolution* 6:845-852.
-  https://doi.org/10.1111/2041-210X.12361
+- Guerin GR, Ruokolainen L, Lowe AJ (2015) A georeferenced
+  implementation of weighted endemism. *Methods in Ecology and
+  Evolution* 6:845-852. <https://doi.org/10.1111/2041-210X.12361>
 - Dinerstein E et al. (2017) An ecoregion-based approach to protecting
   half the terrestrial realm. *BioScience* 67:534-545.
 - Keith DA et al. (2022) A function-based typology for Earth’s
