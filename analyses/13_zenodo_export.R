@@ -80,6 +80,11 @@ file.copy(ds_files, file.path(out_path, "03_datasets", paste0("Dataset_S", 1:6, 
 file.copy(ds_files, here::here("outputs", "PNAS_manuscript", paste0("Dataset_S", 1:6, ".xlsx")),
           overwrite = TRUE)
 
+# Figures 1-3 and S1-S7 (pdf), copied from figures/ to the PNAS submission folder
+fig_ids <- c(1:3, paste0("S", 1:7))
+file.copy(here::here("figures", paste0("Figure", fig_ids, ".pdf")),
+          here::here("outputs", "PNAS_manuscript", paste0("Fig", fig_ids, ".pdf")), overwrite = TRUE)
+
 # 7. README
 writeLines(c(
   "Data for: A biome lens is critical to understanding tree endemism across tropical America",
@@ -116,4 +121,4 @@ writeLines(c(
 ), file.path(out_path, "README.txt"))
 
 rm(out_path, maps_path, d, biomes_map, int_map, obs_layers, biome_files, biome_names, biome_short,
-   int_map_biomes, i, cce_file, th_we, cce_ta, r, cce_b, records, ds_files)
+   int_map_biomes, i, cce_file, th_we, cce_ta, r, cce_b, records, ds_files, fig_ids)
